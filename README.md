@@ -58,7 +58,7 @@ hardware, which is why baselines are recorded there and not on a laptop. The
 diffs are the point.
 
 ```sh
-go install github.com/falvarezma-code/snapgate/cmd/snapgate@v0.1.0
+go install github.com/falvarezma-code/snapgate/cmd/snapgate@v0.1.1
 OLLAMA_CONTEXT_LENGTH=2048 OLLAMA_NUM_PARALLEL=1 ollama serve &
 ollama pull qwen2.5:1.5b
 OLLAMA_API_KEY=ollama scripts/check.sh ollama
