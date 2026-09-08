@@ -3,9 +3,17 @@
 # canary will see. Opens a pull request; nothing is pushed to main.
 #
 #   mode=record  re-record every case of the backend (snapgate record --force)
-#   mode=accept  run a check, then promote only the cases that failed or are
-#                stale (snapgate accept). This is the re-baseline path after a
-#                drift issue or an intentional prompt change.
+#   mode=accept  run a check, then promote only the cases that drifted, are
+#                stale, or have no baseline (snapgate accept). This is the
+#                re-baseline path after a drift issue or an intentional
+#                prompt or check change.
+#
+# Either way the result is verified with a second `snapgate check` before the
+# PR is opened: `record` does not run the checks on what it records, and a
+# case that does not pass right after being recorded is either a baseline
+# the checks reject or a non-deterministic answer, neither of which belongs
+# on main. Hosted cost: record mode spends two calls per case (up to 40 for
+# openai); accept mode spends one per case plus one per accepted case.
 name: record
 
 on:
@@ -47,7 +55,7 @@ jobs:
       - if: inputs.backend != 'openai'
         uses: ./.github/actions/setup-ollama
 
-      - name: Record or accept
+      - name: Record or accept, then verify
         run: |
           case "$BACKEND" in
             both) backends="ollama openai" ;;
@@ -64,18 +72,27 @@ jobs:
               record)
                 # shellcheck disable=SC2086
                 snapgate record --force $cases
+                verify="$cases"
                 ;;
               accept)
                 scripts/check.sh "$b" || true
-                todo=$(jq -r '.cases[] | select(.status == "fail" or .status == "drift") | .name' ".snapgate/reports/$b.json")
-                if [ -z "$todo" ]; then
+                verify=$(jq -r '.cases[] | select(.status == "drift" or .status == "stale" or .status == "missing") | .name' ".snapgate/reports/$b.json")
+                if [ -z "$verify" ]; then
                   echo "nothing to accept for $b"
-                else
-                  # shellcheck disable=SC2086
-                  snapgate accept $todo
+                  continue
                 fi
+                # shellcheck disable=SC2086
+                snapgate accept $verify
                 ;;
             esac
+
+            echo "== verify $b"
+            if ! CASES="$(echo "$verify" | tr '\n' ' ')" REPORT_DIR=.snapgate/verify scripts/check.sh "$b"; then
+              REPORT_DIR=.snapgate/verify scripts/explain-exit.sh "$b"
+              echo "::error::recorded $b baselines do not pass their own checks (a check rejects the recorded answer, or the answer is not deterministic on this runner). No PR opened."
+              exit 1
+            fi
+
             case "$b" in
               ollama)
                 scripts/fingerprint.sh > fingerprints/ollama.json
@@ -102,10 +119,10 @@ jobs:
             exit 0
           fi
           changed=$(git diff --cached --name-only)
-          git commit -q -m "snapshots: $MODE $BACKEND ($(date -u +%F))" -m "Recorded by the record workflow: $RUN_URL"
+          git commit -q -m "snapshots: $MODE $BACKEND ($(date -u +%F))" -m "Recorded and verified by the record workflow: $RUN_URL"
           git push -q origin "$branch"
           {
-            echo "Snapshots recorded on the runner by the **record** workflow (mode \`$MODE\`, backend \`$BACKEND\`)."
+            echo "Snapshots recorded on the runner by the **record** workflow (mode \`$MODE\`, backend \`$BACKEND\`), then verified with a second \`snapgate check\` that every recorded case passes."
             echo
             echo "Run: $RUN_URL"
             echo

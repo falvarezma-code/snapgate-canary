@@ -1,7 +1,8 @@
-# Nightly canary. Nothing in this repository changes between runs; if a check
-# fails, the upstream did. Every such event becomes a public issue with the
-# diff and the fingerprint delta. Provider errors and stale baselines fail the
-# job instead and never open an issue. Baselines are never written here.
+# Nightly canary. Nothing in this repository changes between runs; if a case
+# drifts, the upstream did. Every such event becomes a public issue with the
+# diff and the fingerprint delta. Anything else that is not a pass (provider
+# error, stale or missing baseline, a baseline that fails its own checks)
+# fails the job and never opens an issue. Baselines are never written here.
 name: canary
 
 on:
@@ -51,20 +52,22 @@ jobs:
           code=$?
           set -e
           report=".snapgate/reports/$BACKEND.json"
-          count() { jq -r --arg s "$1" '[.cases[] | select(.status == $s)] | length' "$report" 2>/dev/null || echo 0; }
+          count() { jq -r "[.cases[] | select($1)] | length" "$report" 2>/dev/null || echo 0; }
           {
             echo "code=$code"
-            echo "fail=$(count fail)"
-            echo "stale=$(count drift)"
-            echo "error=$(count error)"
+            echo "drift=$(count '.status == "drift" and .diff != ""')"
+            echo "empty_drift=$(count '.status == "drift" and .diff == ""')"
+            echo "stale=$(count '.status == "stale"')"
+            echo "missing=$(count '.status == "missing"')"
+            echo "error=$(count '.status == "error"')"
           } >> "$GITHUB_OUTPUT"
 
       - name: Build drift report
-        if: steps.check.outputs.fail != '0'
+        if: steps.check.outputs.drift != '0'
         run: scripts/drift-report.sh "$BACKEND" ".snapgate/reports/$BACKEND.json" "$RUNNER_TEMP/drift"
 
       - name: Open or update the drift issue
-        if: steps.check.outputs.fail != '0'
+        if: steps.check.outputs.drift != '0'
         env:
           OUT: ${{ runner.temp }}/drift
         run: |
@@ -103,11 +106,16 @@ jobs:
           if-no-files-found: ignore
 
       - name: Fail on anything that is not drift
-        if: steps.check.outputs.error != '0' || steps.check.outputs.stale != '0' || steps.check.outputs.code == ''
+        if: >-
+          steps.check.outputs.error != '0' || steps.check.outputs.stale != '0' ||
+          steps.check.outputs.missing != '0' || steps.check.outputs.empty_drift != '0' ||
+          steps.check.outputs.code == ''
         env:
           ERRORS: ${{ steps.check.outputs.error }}
           STALE: ${{ steps.check.outputs.stale }}
+          MISSING: ${{ steps.check.outputs.missing }}
+          EMPTY: ${{ steps.check.outputs.empty_drift }}
         run: |
           scripts/explain-exit.sh "$BACKEND"
-          echo "::error::canary ($BACKEND) could not give a clean verdict: ${ERRORS:-?} provider error(s), ${STALE:-?} stale baseline(s). No drift issue is opened for these."
+          echo "::error::canary ($BACKEND) could not give a clean verdict: ${ERRORS:-?} provider error(s), ${STALE:-?} stale, ${MISSING:-?} missing, ${EMPTY:-?} baseline(s) failing their own checks. No drift issue is opened for these."
           exit 1

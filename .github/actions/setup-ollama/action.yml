@@ -56,8 +56,8 @@ runs:
         echo
         ollama pull "$OLLAMA_MODEL"
         ollama list
+        # Exported so scripts/fingerprint.sh records the pinned settings.
         {
           echo "OLLAMA_CONTEXT_LENGTH=$OLLAMA_CONTEXT_LENGTH"
           echo "OLLAMA_NUM_PARALLEL=$OLLAMA_NUM_PARALLEL"
-          echo "OLLAMA_API_KEY=ollama"
         } >> "$GITHUB_ENV"
