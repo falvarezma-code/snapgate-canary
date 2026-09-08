@@ -11,17 +11,18 @@
 #
 # Checks: every case has structural assertions that describe what a correct
 # answer looks like, plus a baseline comparison. `exact` is paired with
-# `similarity: 1` on purpose: the two fail together, and the similarity
-# message carries the score that lands in the drift issue. OpenAI
-# summarization and code-gen use `similarity: 0.9` because hosted decoding
-# at temperature 0 with a seed is close to, but not, deterministic.
+# `similarity: 1` on purpose: they pass and fail together, and only a
+# similarity check produces the `score` that lands in the drift issue.
+# OpenAI summarization and code-gen use `similarity: 0.9` because hosted
+# decoding at temperature 0 with a seed is close to, but not, deterministic.
+# Checks are part of the fingerprint: editing one makes the case stale.
 version: 1
 
 providers:
   ollama:
     type: openai-compatible
     base_url: http://localhost:11434/v1
-    api_key_env: OLLAMA_API_KEY      # any non-empty value; Ollama ignores it
+    # no api_key_env: keyless endpoint, no Authorization header is sent
     timeout: 180s                    # cold model load on a CPU runner
   openai:
     type: openai-compatible
