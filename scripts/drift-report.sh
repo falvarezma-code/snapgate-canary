@@ -4,12 +4,18 @@
 #   scripts/drift-report.sh <backend> <report.json> <outdir>
 #
 # Writes into <outdir>:
-#   body.md   issue body: per-case table with similarity scores, unified
-#             diffs, and the upstream fingerprint before (committed) and
-#             after (this run)
-#   key       hex digest of the diffs with volatile headers removed; two runs
-#             that produce the same diffs produce the same key
+#   body.md   issue body: per-case table with similarity scores and reported
+#             model names, the unified diffs, and the upstream fingerprint
+#             before (committed) and after (this run)
+#   key       hex digest of the diffs; two runs that produce the same diffs
+#             produce the same key, so the nightly can tell "same drift,
+#             day N" from "new drift"
 #   model     the model name as configured for this backend
+#
+# Only cases with status "drift" and a non-empty diff count as upstream
+# drift. A drift with an empty diff means the baseline itself fails a check
+# (the request and the response are unchanged); it is listed separately and
+# never keyed, because nothing upstream moved.
 #
 # Environment:
 #   SNAPGATE_CONFIG   config path (default snapgate.yaml)
@@ -24,7 +30,7 @@ config="${SNAPGATE_CONFIG:-snapgate.yaml}"
 here="$(cd "$(dirname "$0")/.." && pwd)"
 store="$(cd "$(dirname "$config")" && pwd)/.snapgate"
 
-for t in snapgate yq jq; do
+for t in yq jq; do
   command -v "$t" >/dev/null || { echo "$t is required" >&2; exit 3; }
 done
 mkdir -p "$out"
@@ -32,23 +38,15 @@ mkdir -p "$out"
 model=$(yq -r ".cases[] | select(.provider == \"$backend\") | .model" "$config" | sort -u | head -1)
 printf '%s\n' "$model" > "$out/model"
 
-failed=$(jq -r '.cases[] | select(.status == "fail") | .name' "$report")
 total=$(jq -r '.cases | length' "$report")
-nfail=$(printf '%s' "$failed" | grep -c . || true)
+ndrift=$(jq -r '[.cases[] | select(.status == "drift" and .diff != "")] | length' "$report")
+nempty=$(jq -r '[.cases[] | select(.status == "drift" and .diff == "")] | length' "$report")
 
 # --- diffs and the dedupe key ------------------------------------------------
-diffs="$out/diffs.md"
-: > "$diffs"
-: > "$out/key.input"
-for c in $failed; do
-  d=$(snapgate --config "$config" diff "$c" 2>&1 || true)
-  printf '### %s\n\n```diff\n%s\n```\n\n' "$c" "$d" >> "$diffs"
-  # Drop the ---/+++ header lines: they carry record and check timestamps.
-  printf '%s\n' "$c" >> "$out/key.input"
-  printf '%s\n' "$d" | grep -vE '^(---|\+\+\+) ' >> "$out/key.input" || true
-done
-shasum -a 256 "$out/key.input" | cut -c1-16 > "$out/key"
-rm -f "$out/key.input"
+# The JSON diff headers carry no timestamps, so the diffs hash as they are.
+jq -r '.cases[] | select(.status == "drift" and .diff != "") | "### \(.name)\n\n```diff\n\(.diff)```\n"' "$report" > "$out/diffs.md"
+jq -r '.cases[] | select(.status == "drift" and .diff != "") | "\(.name)\n\(.diff)"' "$report" \
+  | shasum -a 256 | cut -c1-16 > "$out/key"
 
 # --- upstream fingerprint: before (committed) vs after (this run) -------------
 fp="$out/fingerprint.md"
@@ -69,28 +67,31 @@ case "$backend" in
     fi
     ;;
   *)
-    # Hosted backends: the only identity Snapgate keeps is response.model.
+    # Hosted backends: the only identity Snapgate keeps is the model name the
+    # endpoint reports. Compare the committed baseline with this run.
     printf '| case | model at record | model in this run |\n|---|---|---|\n' >> "$fp"
     for c in $(jq -r '.cases[] | .name' "$report"); do
       b=$(jq -r '.response.model // "?"' "$store/baselines/$c.json" 2>/dev/null || echo "?")
-      a=$(jq -r '.response.model // "?"' "$store/last/$c.json" 2>/dev/null || echo "?")
+      a=$(jq -r --arg c "$c" '.cases[] | select(.name == $c) | .response_model // "?" | if . == "" then "?" else . end' "$report")
       mark=""; [ "$a" != "$b" ] && mark=" **(changed)**"
-      printf '| %s | `%s` | `%s`%s |\n' "$c" "$b" "$a" "$mark" >> "$fp"
+      printf '| `%s` | `%s` | `%s`%s |\n' "$c" "$b" "$a" "$mark" >> "$fp"
     done
-    printf '\nSnapgate does not record `system_fingerprint`; see GAPS.md.\n' >> "$fp"
+    printf '\nSnapgate does not record `system_fingerprint`; see GAPS.md G1.\n' >> "$fp"
     ;;
 esac
 
 # --- per-case table ----------------------------------------------------------
 table=$(jq -r '
-  def score:
-    [.samples[]?.checks[]? | select(.type == "similarity")] as $s
-    | if ($s | length) == 0 then "n/a"
-      elif ($s[0].passed) then "≥ threshold"
-      else ($s[0].message | capture("is (?<v>[0-9.]+),") | .v) end;
+  def score: if .score == null then "n/a" else (.score * 1000 | round / 1000 | tostring) end;
   def failing: [.samples[]?.checks[]? | select(.passed | not) | .type] | unique | join(", ");
+  def note:
+    if .status == "drift" and .diff == "" then "baseline itself fails: " + failing
+    elif .status == "drift" then failing
+    elif .status == "error" then (.error | gsub("\\|"; "\\|"))
+    elif .status == "stale" then ((.fingerprint_changes // []) | join("; "))
+    else "" end;
   .cases[]
-  | "| `\(.name)` | \(.status) | \(score) | \(if .status == "fail" then failing elif .status == "error" then (.error | gsub("\\|"; "\\|")) else "" end) |"
+  | "| `\(.name)` | \(.status) | \(score) | `\(.response_model | if . == "" then "?" else . end)` | \(note) |"
 ' "$report")
 
 # --- assemble ----------------------------------------------------------------
@@ -99,16 +100,22 @@ table=$(jq -r '
   printf 'Nightly canary detected **upstream drift** on `%s` / `%s`.\n\n' "$backend" "$model"
   printf 'Nothing in this repository changed: every request fingerprint still matches its committed baseline. The answers did not.\n\n'
   [ -n "${RUN_URL:-}" ] && printf 'Run: %s\n\n' "$RUN_URL"
-  printf '## Cases (%s of %s drifted)\n\n' "$nfail" "$total"
-  printf '| case | status | similarity to baseline | failing checks / error |\n|---|---|---|---|\n%s\n\n' "$table"
+  printf '## Cases (%s of %s drifted)\n\n' "$ndrift" "$total"
+  printf '| case | status | similarity | model reported | detail |\n|---|---|---|---|---|\n%s\n\n' "$table"
   printf '## Diffs\n\n'
-  cat "$diffs"
+  cat "$out/diffs.md"
+  if [ "$nempty" != "0" ]; then
+    printf '## Not drift: baselines that fail their own checks\n\n'
+    printf 'These cases returned exactly the baseline answer, but a check rejects it. The recording is wrong, not the model; the job is failed for them and they are not part of the drift key.\n\n'
+    jq -r '.cases[] | select(.status == "drift" and .diff == "") | "- `\(.name)`: " + ([.samples[]?.checks[]? | select(.passed | not) | "\(.type): \(.message)"] | join("; "))' "$report"
+    printf '\n'
+  fi
   printf '## Upstream fingerprint\n\n'
   cat "$fp"
   printf '\n## Next\n\n'
   printf -- '- Same diff tomorrow: this issue gets a "still drifted" comment instead of a new issue.\n'
-  printf -- '- New output is acceptable: run the **record** workflow with `mode: accept`, `backend: %s`. It re-checks, promotes only the drifted cases, and opens a PR with the new baselines and fingerprint.\n' "$backend"
+  printf -- '- New output is acceptable: run the **record** workflow with `mode: accept`, `backend: %s`. It re-checks, promotes only the drifted cases, verifies them, and opens a PR with the new baselines and fingerprint.\n' "$backend"
   printf -- '- New output is wrong: keep the baselines; the issue stays open as the public record.\n'
 } > "$out/body.md"
 
-echo "drift-report: $nfail/$total failed, key $(cat "$out/key"), body $(wc -c < "$out/body.md" | tr -d ' ') bytes"
+echo "drift-report: $ndrift/$total drifted, $nempty with empty diff, key $(cat "$out/key"), body $(wc -c < "$out/body.md" | tr -d ' ') bytes"

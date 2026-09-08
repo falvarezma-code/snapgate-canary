@@ -8,7 +8,7 @@
 # messages, temperature, seed, max_tokens), by running `check` in a scratch
 # copy of the config and reading back the response Snapgate kept under
 # .snapgate/last/. No baseline is needed: a missing baseline makes `check`
-# exit 2, which is fine here, and the provider is still called.
+# exit 2 (status "missing"), which is fine here; the provider is still called.
 #
 # Exit 0 when all N responses match, 1 otherwise. Outputs are left under
 # .determinism/<case>/ for inspection.
@@ -20,7 +20,6 @@ here="$(cd "$(dirname "$0")/.." && pwd)"
 out="$here/.determinism/$case_name"
 
 command -v snapgate >/dev/null || { echo "snapgate is not on PATH" >&2; exit 2; }
-: "${OLLAMA_API_KEY:=ollama}"; export OLLAMA_API_KEY
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -30,7 +29,7 @@ mkdir -p "$out"
 rm -f "$out"/*.txt
 
 for i in $(seq 1 "$n"); do
-  # Exit 1/2 are expected (no baseline); only 3 means the provider failed.
+  # Exit 2 (missing baseline) is expected; only 3 means the provider failed.
   set +e
   snapgate --config "$work/snapgate.yaml" check --json "$case_name" > "$work/report.json"
   code=$?

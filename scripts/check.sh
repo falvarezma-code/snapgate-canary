@@ -6,13 +6,16 @@
 #
 # Environment:
 #   SNAPGATE_CONFIG      config path (default snapgate.yaml)
+#   CASES                space-separated case names to run instead of every
+#                        case of the backend (used by record.yml to verify
+#                        only what it accepted)
 #   REPORT_DIR           where the merged JSON report goes (default .snapgate/reports)
 #   RETRY_BUDGET         max provider calls spent on retries (default 4)
 #   RETRY_DELAYS         backoff in seconds between rounds (default "30 60 120")
 #
 # Writes $REPORT_DIR/<backend>.json in the same shape as `snapgate check --json`
-# and exits with Snapgate's exit code for the merged result: 0 pass, 1 a check
-# failed (upstream drift), 2 stale or missing baseline (definition drift),
+# and exits with Snapgate's exit code for the merged result: 0 pass, 1 drift
+# (request unchanged, response differs), 2 stale or missing baseline,
 # 3 provider error. Only cases whose error looks transient (HTTP 429, 5xx, a
 # timeout, a refused connection) are retried; each retry round re-runs just
 # those cases and their results replace the originals in the report.
@@ -35,21 +38,28 @@ mkdir -p "$report_dir"
 yq -e ".providers.\"$backend\"" "$config" >/dev/null 2>&1 \
   || { echo "no provider named $backend in $config" >&2; exit 3; }
 
-cases=$(yq -r ".cases[] | select(.provider == \"$backend\") | .name" "$config")
+if [ -n "${CASES:-}" ]; then
+  # shellcheck disable=SC2086  # CASES is a space-separated list on purpose
+  cases=$(printf '%s\n' $CASES)
+else
+  cases=$(yq -r ".cases[] | select(.provider == \"$backend\") | .name" "$config")
+fi
 [ -n "$cases" ] || { echo "no cases use provider $backend" >&2; exit 3; }
 
 # shellcheck disable=SC2086
 run_check() { snapgate --config "$config" check --json $1 > "$2" || true; }
 
-# merge <report> <partial>: replace matching cases, recompute run status.
+# merge <report> <partial>: replace matching cases, recompute run status
+# with Snapgate's severity order (ADR 0004).
 merge() {
   jq -s '
-    ({pass: 0, fail: 1, drift: 2, error: 3}) as $sev
+    ({pass: 0, drift: 1, missing: 2, stale: 3, error: 4}) as $sev
+    | ({pass: 0, drift: 1, missing: 2, stale: 2, error: 3}) as $exit
     | (.[1].cases | map({key: .name, value: .}) | from_entries) as $new
     | .[0]
     | .cases |= map($new[.name] // .)
-    | .exit_code = ([.cases[].status | $sev[.]] | max // 0)
-    | .status = (($sev | to_entries | map({key: (.value|tostring), value: .key}) | from_entries)[.exit_code|tostring])
+    | .status = ([.cases[].status] | max_by($sev[.]) // "pass")
+    | .exit_code = $exit[.status]
   ' "$1" "$2" > "$1.tmp" && mv "$1.tmp" "$1"
 }
 
@@ -79,27 +89,26 @@ for delay in $delays; do
 done
 rm -f "$report_dir/$backend.retry.json"
 
-# Human summary. Passing cases are one line; everything else says why.
+# Human summary in Snapgate's own vocabulary. Passing cases are one line;
+# everything else says why and what fixes it.
 jq -r '
+  def failing: [.samples[]?.checks[]? | select(.passed | not) | "\n      \(.type): \(.message)"] | join("");
   .cases[]
-  | "\(.status | ascii_upcase | .[0:5] | . + " " * (5 - length))  \(.name)"
-    + (if .status == "error" then "\n      " + .error
-       elif .status == "drift" then
-         (if .fingerprint.expected == null then "\n      no baseline recorded"
-          else "\n      " + ((.drift // []) | join("\n      ")) end)
-       else "" end)
-    + ([.samples[]?.checks[]? | select(.passed | not) | "\n      \(.type): \(.message)"] | join(""))
+  | "\(.status | ascii_upcase | . + " " * (7 - length))  \(.name)"
+    + (if .status == "pass" then ""
+       elif .status == "drift" and .diff == "" then "  baseline itself fails a check; fix the check or the prompt, then re-record" + failing
+       elif .status == "drift" then "  response changed, request unchanged" + failing
+       elif .status == "stale" then "  request or checks changed since baseline" + ((.fingerprint_changes // []) | map("\n      " + .) | join(""))
+       elif .status == "missing" then "  no baseline recorded"
+       else "\n      " + .error end)
 ' "$report"
-jq -r '"\n\(.cases | length) cases: \([.cases[] | select(.status=="pass")] | length) passed, "
-  + "\([.cases[] | select(.status=="fail")] | length) failed, "
-  + "\([.cases[] | select(.status=="drift")] | length) stale, "
-  + "\([.cases[] | select(.status=="error")] | length) errors (exit \(.exit_code))"' "$report"
+jq -r '
+  def n(s): [.cases[] | select(.status == s)] | length;
+  "\n\(.cases | length) cases: \(n("pass")) passed, \(n("drift")) drifted, \(n("stale")) stale, \(n("missing")) missing, \(n("error")) errors (exit \(.exit_code))"
+' "$report"
 
-# Show what changed for every failed case, so a PR log or a nightly log is
+# The diffs of every drifted case, so a PR log or a nightly log is
 # self-contained.
-for c in $(jq -r '.cases[] | select(.status == "fail") | .name' "$report"); do
-  echo
-  snapgate --config "$config" diff "$c" || true
-done
+jq -r '.cases[] | select(.status == "drift" and .diff != "") | "\n" + .diff' "$report"
 
 exit "$(jq -r .exit_code "$report")"
