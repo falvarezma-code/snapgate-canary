@@ -1,0 +1,63 @@
+name: Setup Ollama
+description: >-
+  Install Ollama (unpinned, so runtime upgrades are observed and recorded),
+  start it under the runner user with a pinned context length and
+  parallelism, and pull the model from a cache keyed on its tag.
+inputs:
+  model:
+    description: Model tag to pull
+    required: false
+    default: qwen2.5:1.5b
+  context-length:
+    description: OLLAMA_CONTEXT_LENGTH for the server. Ollama's /v1 endpoint cannot set num_ctx per request, so it is pinned here.
+    required: false
+    default: "2048"
+  num-parallel:
+    description: OLLAMA_NUM_PARALLEL for the server. 1 keeps batching out of the numerics.
+    required: false
+    default: "1"
+runs:
+  using: composite
+  steps:
+    - name: Cache model files
+      uses: actions/cache@v4
+      with:
+        path: ~/.ollama/models
+        key: ollama-models-${{ inputs.model }}
+
+    - name: Install Ollama
+      shell: bash
+      run: |
+        curl -fsSL https://ollama.com/install.sh | sh
+        # The installer starts a systemd unit as its own user with its own
+        # model directory. Stop it: the server is started below with the
+        # settings this canary pins, under the runner user, so the cached
+        # model directory is the one it reads.
+        sudo systemctl disable --now ollama 2>/dev/null || true
+        ollama --version
+
+    - name: Start server and pull model
+      shell: bash
+      env:
+        OLLAMA_MODEL: ${{ inputs.model }}
+        OLLAMA_CONTEXT_LENGTH: ${{ inputs.context-length }}
+        OLLAMA_NUM_PARALLEL: ${{ inputs.num-parallel }}
+      run: |
+        export OLLAMA_MODELS="$HOME/.ollama/models"
+        mkdir -p "$OLLAMA_MODELS"
+        nohup ollama serve > "$RUNNER_TEMP/ollama.log" 2>&1 &
+        for _ in $(seq 1 60); do
+          curl -sf http://localhost:11434/api/version >/dev/null && break
+          sleep 1
+        done
+        if ! curl -sf http://localhost:11434/api/version; then
+          echo "::error::ollama did not become ready"; cat "$RUNNER_TEMP/ollama.log"; exit 1
+        fi
+        echo
+        ollama pull "$OLLAMA_MODEL"
+        ollama list
+        {
+          echo "OLLAMA_CONTEXT_LENGTH=$OLLAMA_CONTEXT_LENGTH"
+          echo "OLLAMA_NUM_PARALLEL=$OLLAMA_NUM_PARALLEL"
+          echo "OLLAMA_API_KEY=ollama"
+        } >> "$GITHUB_ENV"

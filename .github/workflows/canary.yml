@@ -1,0 +1,113 @@
+# Nightly canary. Nothing in this repository changes between runs; if a check
+# fails, the upstream did. Every such event becomes a public issue with the
+# diff and the fingerprint delta. Provider errors and stale baselines fail the
+# job instead and never open an issue. Baselines are never written here.
+name: canary
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: canary
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: ${{ matrix.backend }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [ollama, openai]
+    env:
+      BACKEND: ${{ matrix.backend }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GH_TOKEN: ${{ github.token }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-snapgate
+      - if: matrix.backend == 'ollama'
+        uses: ./.github/actions/setup-ollama
+
+      - name: Require the hosted secret
+        if: matrix.backend == 'openai' && env.OPENAI_API_KEY == ''
+        run: |
+          echo "::error::OPENAI_API_KEY secret is not set; this is a canary configuration error, not drift"
+          exit 1
+
+      - name: Check
+        id: check
+        run: |
+          set +e
+          scripts/check.sh "$BACKEND"
+          code=$?
+          set -e
+          report=".snapgate/reports/$BACKEND.json"
+          count() { jq -r --arg s "$1" '[.cases[] | select(.status == $s)] | length' "$report" 2>/dev/null || echo 0; }
+          {
+            echo "code=$code"
+            echo "fail=$(count fail)"
+            echo "stale=$(count drift)"
+            echo "error=$(count error)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build drift report
+        if: steps.check.outputs.fail != '0'
+        run: scripts/drift-report.sh "$BACKEND" ".snapgate/reports/$BACKEND.json" "$RUNNER_TEMP/drift"
+
+      - name: Open or update the drift issue
+        if: steps.check.outputs.fail != '0'
+        env:
+          OUT: ${{ runner.temp }}/drift
+        run: |
+          key=$(cat "$OUT/key")
+          model=$(cat "$OUT/model")
+          today=$(date -u +%F)
+          gh label create drift --description "Upstream model output changed with no change in this repo" --color B60205 --force
+          open=$(gh issue list --label drift --state open --limit 100 --json number,body,createdAt)
+          same=$(jq -r --arg m "drift-key: $BACKEND:$key" '[.[] | select(.body | contains($m))] | first | .number // empty' <<< "$open")
+          if [ -n "$same" ]; then
+            created=$(jq -r --argjson n "$same" '.[] | select(.number == $n) | .createdAt' <<< "$open")
+            day=$(( ( $(date -u +%s) - $(date -u -d "$created" +%s) ) / 86400 + 1 ))
+            gh issue comment "$same" --body "Still drifted, day $day. Same diff as when this issue was opened (key \`$BACKEND:$key\`). Run: $RUN_URL"
+            echo "::warning title=upstream drift ($BACKEND)::still drifted, day $day, see #$same"
+          else
+            prev=$(jq -r --arg p "drift-key: $BACKEND:" '[.[] | select(.body | contains($p))] | first | .number // empty' <<< "$open")
+            if [ -n "$prev" ]; then
+              printf '\nSupersedes #%s: the diff changed.\n' "$prev" >> "$OUT/body.md"
+            fi
+            url=$(gh issue create --label drift --title "Drift: $BACKEND/$model $today" --body-file "$OUT/body.md")
+            if [ -n "$prev" ]; then
+              gh issue comment "$prev" --body "The diff changed; tracking continues in $url."
+            fi
+            echo "::warning title=upstream drift ($BACKEND)::opened $url"
+          fi
+
+      - name: Upload report and diffs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-${{ matrix.backend }}
+          path: |
+            .snapgate/reports/
+            .snapgate/last/
+            ${{ runner.temp }}/drift/
+          if-no-files-found: ignore
+
+      - name: Fail on anything that is not drift
+        if: steps.check.outputs.error != '0' || steps.check.outputs.stale != '0' || steps.check.outputs.code == ''
+        env:
+          ERRORS: ${{ steps.check.outputs.error }}
+          STALE: ${{ steps.check.outputs.stale }}
+        run: |
+          scripts/explain-exit.sh "$BACKEND"
+          echo "::error::canary ($BACKEND) could not give a clean verdict: ${ERRORS:-?} provider error(s), ${STALE:-?} stale baseline(s). No drift issue is opened for these."
+          exit 1

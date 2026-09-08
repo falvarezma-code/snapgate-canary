@@ -1,0 +1,50 @@
+# The consumer integration: every pull request re-runs the prompts against
+# both upstreams and compares with the committed baselines. Any non-zero
+# Snapgate exit fails the job, and branch protection turns that into a
+# blocked merge. Exit 2 (a prompt changed, baseline not re-recorded) is the
+# common case for a PR; the fix is `snapgate accept` (see README).
+name: gate
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  ollama:
+    name: snapgate check (ollama)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-snapgate
+      - uses: ./.github/actions/setup-ollama
+      - name: Check
+        run: scripts/check.sh ollama
+      - name: Explain
+        if: failure()
+        run: scripts/explain-exit.sh ollama
+
+  openai:
+    name: snapgate check (openai)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-snapgate
+      - name: Check
+        if: env.OPENAI_API_KEY != ''
+        run: scripts/check.sh openai
+      - name: Explain
+        if: failure()
+        run: scripts/explain-exit.sh openai
+      - name: Skipped
+        if: env.OPENAI_API_KEY == ''
+        run: echo "::notice::OPENAI_API_KEY is not available to this run (pull request from a fork?); hosted check skipped"

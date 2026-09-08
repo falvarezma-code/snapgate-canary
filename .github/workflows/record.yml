@@ -1,0 +1,130 @@
+# The only path that writes baselines. Runs on the same runner image and
+# Ollama settings as the nightly, so the recorded answers are the ones the
+# canary will see. Opens a pull request; nothing is pushed to main.
+#
+#   mode=record  re-record every case of the backend (snapgate record --force)
+#   mode=accept  run a check, then promote only the cases that failed or are
+#                stale (snapgate accept). This is the re-baseline path after a
+#                drift issue or an intentional prompt change.
+name: record
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend:
+        description: Which backend to record
+        type: choice
+        options: [both, ollama, openai]
+        default: both
+      mode:
+        description: record everything, or accept only what changed
+        type: choice
+        options: [record, accept]
+        default: record
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# Shares the nightly's group so a record never runs while a canary is running.
+concurrency:
+  group: canary
+  cancel-in-progress: false
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      BACKEND: ${{ inputs.backend }}
+      MODE: ${{ inputs.mode }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GH_TOKEN: ${{ github.token }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-snapgate
+      - if: inputs.backend != 'openai'
+        uses: ./.github/actions/setup-ollama
+
+      - name: Record or accept
+        run: |
+          case "$BACKEND" in
+            both) backends="ollama openai" ;;
+            *)    backends="$BACKEND" ;;
+          esac
+          mkdir -p fingerprints
+          for b in $backends; do
+            if [ "$b" = openai ] && [ -z "$OPENAI_API_KEY" ]; then
+              echo "::error::OPENAI_API_KEY secret is not set"; exit 1
+            fi
+            cases=$(yq -r ".cases[] | select(.provider == \"$b\") | .name" snapgate.yaml)
+            echo "== $MODE $b"
+            case "$MODE" in
+              record)
+                # shellcheck disable=SC2086
+                snapgate record --force $cases
+                ;;
+              accept)
+                scripts/check.sh "$b" || true
+                todo=$(jq -r '.cases[] | select(.status == "fail" or .status == "drift") | .name' ".snapgate/reports/$b.json")
+                if [ -z "$todo" ]; then
+                  echo "nothing to accept for $b"
+                else
+                  # shellcheck disable=SC2086
+                  snapgate accept $todo
+                fi
+                ;;
+            esac
+            case "$b" in
+              ollama)
+                scripts/fingerprint.sh > fingerprints/ollama.json
+                ;;
+              openai)
+                # Hosted identity is whatever the endpoint reports back.
+                for c in $cases; do cat ".snapgate/baselines/$c.json"; done \
+                  | jq -s '{alias: (map(.request.model) | unique), resolved_model: (map(.response.model) | unique)}' \
+                  > fingerprints/openai.json
+                ;;
+            esac
+            cat "fingerprints/$b.json"
+          done
+
+      - name: Open a pull request
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          branch="snapshots/$MODE-$BACKEND-$(date -u +%Y%m%d)-$GITHUB_RUN_ID"
+          git checkout -b "$branch"
+          git add .snapgate/baselines fingerprints
+          if git diff --cached --quiet; then
+            echo "::notice::no baseline or fingerprint changed; nothing to open"
+            exit 0
+          fi
+          changed=$(git diff --cached --name-only)
+          git commit -q -m "snapshots: $MODE $BACKEND ($(date -u +%F))" -m "Recorded by the record workflow: $RUN_URL"
+          git push -q origin "$branch"
+          {
+            echo "Snapshots recorded on the runner by the **record** workflow (mode \`$MODE\`, backend \`$BACKEND\`)."
+            echo
+            echo "Run: $RUN_URL"
+            echo
+            echo "## Changed"
+            echo
+            echo '```'
+            echo "$changed"
+            echo '```'
+            echo
+            for f in fingerprints/*.json; do
+              [ -f "$f" ] || continue
+              echo "## $f"
+              echo
+              echo '```json'
+              cat "$f"
+              echo '```'
+              echo
+            done
+            echo "Note: pull requests opened with the built-in token do not trigger the \`gate\` workflow. Close and reopen this PR to run it, or merge on the strength of the record log."
+          } > "$RUNNER_TEMP/pr.md"
+          gh label create snapshots --description "Baseline updates recorded on the runner" --color 0E8A16 --force
+          gh pr create --title "snapshots: $MODE $BACKEND ($(date -u +%F))" --body-file "$RUNNER_TEMP/pr.md" --label snapshots --head "$branch"

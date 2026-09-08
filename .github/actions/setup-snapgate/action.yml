@@ -1,0 +1,22 @@
+name: Setup Snapgate
+description: Install the snapgate CLI at a pinned version.
+inputs:
+  version:
+    description: Tag or commit of github.com/falvarezma-code/snapgate to install
+    required: false
+    default: v0.1.0
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v5
+      with:
+        go-version: stable
+        cache: false
+    - name: go install snapgate
+      shell: bash
+      env:
+        SNAPGATE_VERSION: ${{ inputs.version }}
+      run: |
+        go install "github.com/falvarezma-code/snapgate/cmd/snapgate@${SNAPGATE_VERSION}"
+        echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+        "$(go env GOPATH)/bin/snapgate" --version
