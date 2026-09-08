@@ -1,0 +1,6 @@
+# Scratch state from `snapgate check`; baselines/ is committed on purpose.
+.snapgate/last/
+# Local experiment output from scripts/determinism.sh
+.determinism/
+# Per-run JSON reports from scripts/check.sh
+.snapgate/reports/
