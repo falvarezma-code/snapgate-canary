@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "departure": {
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}",
+      "type": "string"
+    },
+    "destination": {
+      "pattern": "^[A-Z]{3}$",
+      "type": "string"
+    },
+    "flight": {
+      "type": "string"
+    },
+    "origin": {
+      "pattern": "^[A-Z]{3}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "flight",
+    "origin",
+    "destination",
+    "departure"
+  ],
+  "type": "object"
+}

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "city": {
+      "type": "string"
+    },
+    "country": {
+      "pattern": "^[A-Z]{2}$",
+      "type": "string"
+    },
+    "postal_code": {
+      "type": "string"
+    },
+    "street": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "street",
+    "city",
+    "postal_code",
+    "country"
+  ],
+  "type": "object"
+}

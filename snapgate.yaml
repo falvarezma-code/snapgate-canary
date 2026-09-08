@@ -1,0 +1,583 @@
+# snapgate-canary: the same 24 prompts against two upstreams.
+#
+# Each prompt is written once as a YAML anchor on its Ollama case and aliased
+# into its OpenAI case, so a one-word edit to a system prompt changes both
+# backends' fingerprints in the same PR. Case names are <group>.<case>.<backend>
+# because the workflows pick a backend's cases by name.
+#
+# Ollama runs all 24 prompts. OpenAI runs 20 (five per group); the last prompt
+# of each group is local-only, keeping the hosted budget under 24 requests per
+# run including retries.
+#
+# Checks: every case has structural assertions that describe what a correct
+# answer looks like, plus a baseline comparison. `exact` is paired with
+# `similarity: 1` on purpose: the two fail together, and the similarity
+# message carries the score that lands in the drift issue. OpenAI
+# summarization and code-gen use `similarity: 0.9` because hosted decoding
+# at temperature 0 with a seed is close to, but not, deterministic.
+version: 1
+
+providers:
+  ollama:
+    type: openai-compatible
+    base_url: http://localhost:11434/v1
+    api_key_env: OLLAMA_API_KEY      # any non-empty value; Ollama ignores it
+    timeout: 180s                    # cold model load on a CPU runner
+  openai:
+    type: openai-compatible
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+    timeout: 60s
+
+defaults:
+  samples: 1
+  params:
+    temperature: 0
+    seed: 42
+
+cases:
+  # ---------------------------------------------------------------------
+  # json-extraction: reply must be one JSON object matching a schema.
+  # Plausible drift: numbers becoming strings, null vs "", added keys,
+  # code fences, date formats, country codes.
+  # ---------------------------------------------------------------------
+  - name: json.order.ollama
+    provider: ollama
+    model: qwen2.5:1.5b
+    params: {max_tokens: 120}
+    messages: &p_json_order
+      - role: system
+        content: Extract the order from the message. Reply with a single JSON object with keys order_id (string), item (string), quantity (integer), issue (string). JSON only, no markdown, no code fences, no commentary.
+      - role: user
+        content: "Hi, order 4821, I got 2 mugs and one of them is cracked."
+    checks: &c_json_order
+      - {type: json_valid}
+      - {type: json_schema, schema: schemas/order.json}
+      - {type: exact}
+      - {type: similarity, threshold: 1}
+  - name: json.order.openai
+    provider: openai
+    model: gpt-4o-mini
+    params: {max_tokens: 120}
+    messages: *p_json_order
+    checks: *c_json_order
+
+  - name: json.contact.ollama
+    provider: ollama
+    model: qwen2.5:1.5b
+    params: {max_tokens: 120}
+    messages: &p_json_contact
+      - role: system
+        content: Extract contact details from the message. Reply with a single JSON object with keys name (string), email (string), phone (string, or null if absent). JSON only, no markdown, no code fences, no commentary.
+      - role: user
+        content: "Please reach Dana Whitfield at dana.w@example.org; she did not leave a number."
+    checks: &c_json_contact
+      - {type: json_valid}
+      - {type: json_schema, schema: schemas/contact.json}
+      - {type: exact}
+      - {type: similarity, threshold: 1}
+  - name: json.contact.openai
+    provider: openai
+    model: gpt-4o-mini
+    params: {max_tokens: 120}
+    messages: *p_json_contact
+    checks: *c_json_contact
+
+  - name: json.event.ollama
+    provider: ollama
+    model: qwen2.5:1.5b
+    params: {max_tokens: 120}
+    messages: &p_json_event
+      - role: system
+        content: Extract the event from the message. Reply with a single JSON object with keys title (string), date (string, YYYY-MM-DD), time (string, 24-hour HH:MM), location (string). JSON only, no markdown, no code fences, no commentary.
+      - role: user
+        content: "Reminder: the Q3 planning review is on 14 October 2026 at 3pm in the Harbour Room."
+    checks: &c_json_event
+      - {type: json_valid}
+      - {type: json_schema, schema: schemas/event.json}
+      - {type: exact}
+      - {type: similarity, threshold: 1}
+  - name: json.event.openai
+    provider: openai
+    model: gpt-4o-mini
+    params: {max_tokens: 120}
+    messages: *p_json_event
+    checks: *c_json_event
+
+  - name: json.address.ollama
+    provider: ollama
+    model: qwen2.5:1.5b
+    params: {max_tokens: 120}
+    messages: &p_json_address
+      - role: system
+        content: Extract the postal address from the message. Reply with a single JSON object with keys street (string), city (string), postal_code (string), country (string, ISO 3166-1 alpha-2 code). JSON only, no markdown, no code fences, no commentary.
+      - role: user
+        content: "Ship it to 22 Rosemary Lane, Bristol BS1 4DJ, United Kingdom."
+    checks: &c_json_address
+      - {type: json_valid}
+      - {type: json_schema, schema: schemas/address.json}
+      - {type: exact}
+      - {type: similarity, threshold: 1}
+  - name: json.address.openai
+    provider: openai
+    model: gpt-4o-mini
+    params: {max_tokens: 120}
+    messages: *p_json_address
+    checks: *c_json_address
+
+  - name: json.product.ollama
+    provider: ollama
+    model: qwen2.5:1.5b
+    params: {max_tokens: 120}
+    messages: &p_json_product
+      - role: system
+        content: Extract the product from the message. Reply with a single JSON object with keys name (string), price (number), currency (string, 3-letter code), in_stock (boolean). JSON only, no markdown, no code fences, no commentary.
+      - role: user
+        content: "The Aurora desk lamp is EUR 49.90 and is back in stock as of today."
+    checks: &c_json_product
+      - {type: json_valid}
+      - {type: json_schema, schema: schemas/product.json}
+      - {type: exact}
+      - {type: similarity, threshold: 1}
+  - name: json.product.openai
+    provider: openai
+    model: gpt-4o-mini
+    params: {max_tokens: 120}
+    messages: *p_json_product
+    checks: *c_json_product
+
+  # Local-only: the sixth prompt of each group keeps the hosted budget.
+  - name: json.flight.ollama
+    provider: ollama
+    model: qwen2.5:1.5b
+    params: {max_tokens: 120}
+    messages:
+      - role: system
+        content: Extract the flight from the message. Reply with a single JSON object with keys flight (string), origin (string, IATA code), destination (string, IATA code), departure (string, ISO 8601 date-time). JSON only, no markdown, no code fences, no commentary.
+      - role: user
+        content: "Flight BA285 leaves London Heathrow for San Francisco on 2026-11-02 at 11:25."
+    checks:
+      - {type: json_valid}
+      - {type: json_schema, schema: schemas/flight.json}
+      - {type: exact}
+      - {type: similarity, threshold: 1}
+
+  # ---------------------------------------------------------------------
+  # classification: exactly one lowercase label from a closed set.
+  # Plausible drift: label flips on ambiguous input, added punctuation or
+  # explanation, capitalisation.
+  # ---------------------------------------------------------------------
+  - name: classify.sentiment.ollama
+    provider: ollama
+    model: qwen2.5:1.5b
+    params: {max_tokens: 8}
+    messages: &p_classify_sentiment
+      - role: system
+        content: "Classify the sentiment of the message. Reply with exactly one word from this list: positive, negative, neutral. Lowercase, no punctuation, nothing else."
+      - role: user
+        content: "Honestly the cracked mug was annoying, but support sorted it out fast."
+    checks: &c_classify_sentiment
+      - {type: regex, pattern: '^(positive|negative|neutral)\s*$'}
+      - {type: exact}
+      - {type: similarity, threshold: 1}
+  - name: classify.sentiment.openai
+    provider: openai
+    model: gpt-4o-mini
+    params: {max_tokens: 8}
+    messages: *p_classify_sentiment
+    checks: *c_classify_sentiment
+
+  - name: classify.intent.ollama
+    provider: ollama
+    model: qwen2.5:1.5b
+    params: {max_tokens: 8}
+    messages: &p_classify_intent
+      - role: system
+        content: "Classify the customer's intent. Reply with exactly one word from this list: refund, cancel, shipping, other. Lowercase, no punctuation, nothing else."
+      - role: user
+        content: "I ordered this three weeks ago and the tracking page still says label created. Where is it?"
+    checks: &c_classify_intent
+      - {type: regex, pattern: '^(refund|cancel|shipping|other)\s*$'}
+      - {type: exact}
+      - {type: similarity, threshold: 1}
+  - name: classify.intent.openai
+    provider: openai
+    model: gpt-4o-mini
+    params: {max_tokens: 8}
+    messages: *p_classify_intent
+    checks: *c_classify_intent
+
+  - name: classify.language.ollama
+    provider: ollama
+    model: qwen2.5:1.5b
+    params: {max_tokens: 8}
+    messages: &p_classify_language
+      - role: system
+        content: "Identify the language of the message. Reply with exactly one code from this list: en, es, fr, de, pt, it. Lowercase, no punctuation, nothing else."
+      - role: user
+        content: "Obrigado pela resposta rápida, vou verificar o pedido ainda hoje."
+    checks: &c_classify_language
+      - {type: regex, pattern: '^(en|es|fr|de|pt|it)\s*$'}
+      - {type: exact}
+      - {type: similarity, threshold: 1}
+  - name: classify.language.openai
+    provider: openai
+    model: gpt-4o-mini
+    params: {max_tokens: 8}
+    messages: *p_classify_language
+    checks: *c_classify_language
+
+  - name: classify.urgency.ollama
+    provider: ollama
+    model: qwen2.5:1.5b
+    params: {max_tokens: 8}
+    messages: &p_classify_urgency
+      - role: system
+        content: "Classify how urgent the support ticket is. Reply with exactly one word from this list: low, medium, high. Lowercase, no punctuation, nothing else."
+      - role: user
+        content: "Checkout has been returning a 500 error for every customer for the last twenty minutes."
+    checks: &c_classify_urgency
+      - {type: regex, pattern: '^(low|medium|high)\s*$'}
+      - {type: exact}
+      - {type: similarity, threshold: 1}
+  - name: classify.urgency.openai
+    provider: openai
+    model: gpt-4o-mini
+    params: {max_tokens: 8}
+    messages: *p_classify_urgency
+    checks: *c_classify_urgency
+
+  - name: classify.spam.ollama
+    provider: ollama
+    model: qwen2.5:1.5b
+    params: {max_tokens: 8}
+    messages: &p_classify_spam
+      - role: system
+        content: "Classify the email. Reply with exactly one word from this list: spam, ham. Lowercase, no punctuation, nothing else."
+      - role: user
+        content: "Congratulations! You have been selected for a limited cash reward. Click the link within 24 hours to claim."
+    checks: &c_classify_spam
+      - {type: regex, pattern: '^(spam|ham)\s*$'}
+      - {type: exact}
+      - {type: similarity, threshold: 1}
+  - name: classify.spam.openai
+    provider: openai
+    model: gpt-4o-mini
+    params: {max_tokens: 8}
+    messages: *p_classify_spam
+    checks: *c_classify_spam
+
+  # Local-only.
+  - name: classify.topic.ollama
+    provider: ollama
+    model: qwen2.5:1.5b
+    params: {max_tokens: 8}
+    messages:
+      - role: system
+        content: "Classify the support message by topic. Reply with exactly one word from this list: billing, technical, account, sales. Lowercase, no punctuation, nothing else."
+      - role: user
+        content: "I was charged twice for the same month and I want the duplicate charge reversed."
+    checks:
+      - {type: regex, pattern: '^(billing|technical|account|sales)\s*$'}
+      - {type: exact}
+      - {type: similarity, threshold: 1}
+
+  # ---------------------------------------------------------------------
+  # summarization: one plain-text sentence.
+  # Plausible drift: length creep, bullet points, dropped facts, preamble
+  # like "Here is a summary:".
+  # ---------------------------------------------------------------------
+  - name: summarize.release.ollama
+    provider: ollama
+    model: qwen2.5:1.5b
+    params: {max_tokens: 80}
+    messages: &p_summarize_release
+      - role: system
+        content: Summarize the text in one sentence of at most 25 words. Plain text only, no preamble, no bullet points.
+      - role: user
+        content: "Version 2.4 of the CLI adds a --dry-run flag to every write command, removes the deprecated sync subcommand, and fixes a race that corrupted the cache when two instances started at once. Upgrading requires no config changes."
+    checks: &c_summarize_release
+      - {type: contains, value: "2.4"}
+      - {type: max_length, value: "300"}
+      - {type: min_length, value: "20"}
+      - {type: not_contains, value: "Here is"}
+      - {type: exact}
+      - {type: similarity, threshold: 1}
+  - name: summarize.release.openai
+    provider: openai
+    model: gpt-4o-mini
+    params: {max_tokens: 80}
+    messages: *p_summarize_release
+    checks:
+      - {type: contains, value: "2.4"}
+      - {type: max_length, value: "300"}
+      - {type: min_length, value: "20"}
+      - {type: not_contains, value: "Here is"}
+      - {type: similarity, threshold: 0.9}
+
+  - name: summarize.incident.ollama
+    provider: ollama
+    model: qwen2.5:1.5b
+    params: {max_tokens: 80}
+    messages: &p_summarize_incident
+      - role: system
+        content: Summarize the text in one sentence of at most 25 words. Plain text only, no preamble, no bullet points.
+      - role: user
+        content: "At 09:12 UTC the primary database ran out of disk after a log rotation job failed silently for six days. Writes were rejected for 41 minutes until an engineer expanded the volume. We are adding a disk-usage alert and a check that the rotation job actually ran."
+    checks: &c_summarize_incident
+      - {type: contains, value: "41"}
+      - {type: max_length, value: "300"}
+      - {type: min_length, value: "20"}
+      - {type: not_contains, value: "Here is"}
+      - {type: exact}
+      - {type: similarity, threshold: 1}
+  - name: summarize.incident.openai
+    provider: openai
+    model: gpt-4o-mini
+    params: {max_tokens: 80}
+    messages: *p_summarize_incident
+    checks:
+      - {type: contains, value: "41"}
+      - {type: max_length, value: "300"}
+      - {type: min_length, value: "20"}
+      - {type: not_contains, value: "Here is"}
+      - {type: similarity, threshold: 0.9}
+
+  - name: summarize.meeting.ollama
+    provider: ollama
+    model: qwen2.5:1.5b
+    params: {max_tokens: 80}
+    messages: &p_summarize_meeting
+      - role: system
+        content: Summarize the text in one sentence of at most 25 words. Plain text only, no preamble, no bullet points.
+      - role: user
+        content: "Notes from Tuesday: Priya will draft the pricing page by Friday. Marcus is blocked on the SSO vendor and will escalate. We agreed to postpone the mobile launch to November so QA has two full weeks. Next sync is Thursday at 10."
+    checks: &c_summarize_meeting
+      - {type: max_length, value: "300"}
+      - {type: min_length, value: "20"}
+      - {type: not_contains, value: "Here is"}
+      - {type: exact}
+      - {type: similarity, threshold: 1}
+  - name: summarize.meeting.openai
+    provider: openai
+    model: gpt-4o-mini
+    params: {max_tokens: 80}
+    messages: *p_summarize_meeting
+    checks:
+      - {type: max_length, value: "300"}
+      - {type: min_length, value: "20"}
+      - {type: not_contains, value: "Here is"}
+      - {type: similarity, threshold: 0.9}
+
+  - name: summarize.review.ollama
+    provider: ollama
+    model: qwen2.5:1.5b
+    params: {max_tokens: 80}
+    messages: &p_summarize_review
+      - role: system
+        content: Summarize the text in one sentence of at most 25 words. Plain text only, no preamble, no bullet points.
+      - role: user
+        content: "I bought the Aurora lamp for my desk. The light is warm and the dimmer is smooth, but the base is lighter than it looks and it tipped over twice when I bumped the desk. Good lamp, wobbly stand."
+    checks: &c_summarize_review
+      - {type: max_length, value: "300"}
+      - {type: min_length, value: "20"}
+      - {type: not_contains, value: "Here is"}
+      - {type: exact}
+      - {type: similarity, threshold: 1}
+  - name: summarize.review.openai
+    provider: openai
+    model: gpt-4o-mini
+    params: {max_tokens: 80}
+    messages: *p_summarize_review
+    checks:
+      - {type: max_length, value: "300"}
+      - {type: min_length, value: "20"}
+      - {type: not_contains, value: "Here is"}
+      - {type: similarity, threshold: 0.9}
+
+  - name: summarize.abstract.ollama
+    provider: ollama
+    model: qwen2.5:1.5b
+    params: {max_tokens: 80}
+    messages: &p_summarize_abstract
+      - role: system
+        content: Summarize the text in one sentence of at most 25 words. Plain text only, no preamble, no bullet points.
+      - role: user
+        content: "We measured how often three small language models change their answer to a fixed prompt across 30 days. With greedy decoding and a fixed seed, local models were stable, while hosted models changed 3 to 8 percent of outputs, usually after undocumented backend updates."
+    checks: &c_summarize_abstract
+      - {type: max_length, value: "300"}
+      - {type: min_length, value: "20"}
+      - {type: not_contains, value: "Here is"}
+      - {type: exact}
+      - {type: similarity, threshold: 1}
+  - name: summarize.abstract.openai
+    provider: openai
+    model: gpt-4o-mini
+    params: {max_tokens: 80}
+    messages: *p_summarize_abstract
+    checks:
+      - {type: max_length, value: "300"}
+      - {type: min_length, value: "20"}
+      - {type: not_contains, value: "Here is"}
+      - {type: similarity, threshold: 0.9}
+
+  # Local-only.
+  - name: summarize.email.ollama
+    provider: ollama
+    model: qwen2.5:1.5b
+    params: {max_tokens: 80}
+    messages:
+      - role: system
+        content: Summarize the text in one sentence of at most 25 words. Plain text only, no preamble, no bullet points.
+      - role: user
+        content: "Hello, I renewed my annual plan on 3 September but my dashboard still shows the free tier and I cannot export reports. The receipt number is R-77813. Could you check what happened and restore my access? Thanks, Lena"
+    checks:
+      - {type: max_length, value: "300"}
+      - {type: min_length, value: "20"}
+      - {type: not_contains, value: "Here is"}
+      - {type: exact}
+      - {type: similarity, threshold: 1}
+
+  # ---------------------------------------------------------------------
+  # code-gen: a single Python function, code only.
+  # Plausible drift: code fences appear or disappear, docstrings or type
+  # hints added or dropped, a different algorithm, an explanation after the
+  # code. qwen2.5:1.5b fences its answer despite the instruction, so fences
+  # are not a structural failure; the baseline comparison catches a change
+  # either way.
+  # ---------------------------------------------------------------------
+  - name: codegen.palindrome.ollama
+    provider: ollama
+    model: qwen2.5:1.5b
+    params: {max_tokens: 200}
+    messages: &p_codegen_palindrome
+      - role: system
+        content: Write the requested Python function. Reply with code only, no explanation, no markdown, no code fences.
+      - role: user
+        content: "Write is_palindrome(s) that returns True if s reads the same forwards and backwards, ignoring case and non-alphanumeric characters."
+    checks: &c_codegen_palindrome
+      - {type: regex, pattern: '(?m)^def is_palindrome\('}
+      - {type: max_length, value: "800"}
+      - {type: exact}
+      - {type: similarity, threshold: 1}
+  - name: codegen.palindrome.openai
+    provider: openai
+    model: gpt-4o-mini
+    params: {max_tokens: 200}
+    messages: *p_codegen_palindrome
+    checks:
+      - {type: regex, pattern: '(?m)^def is_palindrome\('}
+      - {type: max_length, value: "800"}
+      - {type: similarity, threshold: 0.9}
+
+  - name: codegen.fizzbuzz.ollama
+    provider: ollama
+    model: qwen2.5:1.5b
+    params: {max_tokens: 200}
+    messages: &p_codegen_fizzbuzz
+      - role: system
+        content: Write the requested Python function. Reply with code only, no explanation, no markdown, no code fences.
+      - role: user
+        content: "Write fizzbuzz(n) that returns a list of strings for 1 through n: 'Fizz' for multiples of 3, 'Buzz' for multiples of 5, 'FizzBuzz' for both, otherwise the number as a string."
+    checks: &c_codegen_fizzbuzz
+      - {type: regex, pattern: '(?m)^def fizzbuzz\('}
+      - {type: max_length, value: "800"}
+      - {type: exact}
+      - {type: similarity, threshold: 1}
+  - name: codegen.fizzbuzz.openai
+    provider: openai
+    model: gpt-4o-mini
+    params: {max_tokens: 200}
+    messages: *p_codegen_fizzbuzz
+    checks:
+      - {type: regex, pattern: '(?m)^def fizzbuzz\('}
+      - {type: max_length, value: "800"}
+      - {type: similarity, threshold: 0.9}
+
+  - name: codegen.slugify.ollama
+    provider: ollama
+    model: qwen2.5:1.5b
+    params: {max_tokens: 200}
+    messages: &p_codegen_slugify
+      - role: system
+        content: Write the requested Python function. Reply with code only, no explanation, no markdown, no code fences.
+      - role: user
+        content: "Write slugify(title) that lowercases the string, replaces runs of non-alphanumeric characters with a single hyphen, and strips leading and trailing hyphens."
+    checks: &c_codegen_slugify
+      - {type: regex, pattern: '(?m)^def slugify\('}
+      - {type: max_length, value: "800"}
+      - {type: exact}
+      - {type: similarity, threshold: 1}
+  - name: codegen.slugify.openai
+    provider: openai
+    model: gpt-4o-mini
+    params: {max_tokens: 200}
+    messages: *p_codegen_slugify
+    checks:
+      - {type: regex, pattern: '(?m)^def slugify\('}
+      - {type: max_length, value: "800"}
+      - {type: similarity, threshold: 0.9}
+
+  - name: codegen.fibonacci.ollama
+    provider: ollama
+    model: qwen2.5:1.5b
+    params: {max_tokens: 200}
+    messages: &p_codegen_fibonacci
+      - role: system
+        content: Write the requested Python function. Reply with code only, no explanation, no markdown, no code fences.
+      - role: user
+        content: "Write fib(n) that returns the nth Fibonacci number iteratively, with fib(0) = 0 and fib(1) = 1."
+    checks: &c_codegen_fibonacci
+      - {type: regex, pattern: '(?m)^def fib\('}
+      - {type: max_length, value: "800"}
+      - {type: exact}
+      - {type: similarity, threshold: 1}
+  - name: codegen.fibonacci.openai
+    provider: openai
+    model: gpt-4o-mini
+    params: {max_tokens: 200}
+    messages: *p_codegen_fibonacci
+    checks:
+      - {type: regex, pattern: '(?m)^def fib\('}
+      - {type: max_length, value: "800"}
+      - {type: similarity, threshold: 0.9}
+
+  - name: codegen.dedupe.ollama
+    provider: ollama
+    model: qwen2.5:1.5b
+    params: {max_tokens: 200}
+    messages: &p_codegen_dedupe
+      - role: system
+        content: Write the requested Python function. Reply with code only, no explanation, no markdown, no code fences.
+      - role: user
+        content: "Write dedupe(items) that returns a new list with duplicates removed, keeping the first occurrence and preserving order."
+    checks: &c_codegen_dedupe
+      - {type: regex, pattern: '(?m)^def dedupe\('}
+      - {type: max_length, value: "800"}
+      - {type: exact}
+      - {type: similarity, threshold: 1}
+  - name: codegen.dedupe.openai
+    provider: openai
+    model: gpt-4o-mini
+    params: {max_tokens: 200}
+    messages: *p_codegen_dedupe
+    checks:
+      - {type: regex, pattern: '(?m)^def dedupe\('}
+      - {type: max_length, value: "800"}
+      - {type: similarity, threshold: 0.9}
+
+  # Local-only.
+  - name: codegen.parse_kv.ollama
+    provider: ollama
+    model: qwen2.5:1.5b
+    params: {max_tokens: 200}
+    messages:
+      - role: system
+        content: Write the requested Python function. Reply with code only, no explanation, no markdown, no code fences.
+      - role: user
+        content: "Write parse_kv(s) that parses a string like 'a=1;b=2' into a dict of string keys to string values, ignoring empty segments."
+    checks:
+      - {type: regex, pattern: '(?m)^def parse_kv\('}
+      - {type: max_length, value: "800"}
+      - {type: exact}
+      - {type: similarity, threshold: 1}

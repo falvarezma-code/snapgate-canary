@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "issue": {
+      "type": "string"
+    },
+    "item": {
+      "type": "string"
+    },
+    "order_id": {
+      "type": "string"
+    },
+    "quantity": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "order_id",
+    "item",
+    "quantity",
+    "issue"
+  ],
+  "type": "object"
+}

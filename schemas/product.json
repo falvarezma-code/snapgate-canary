@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "currency": {
+      "pattern": "^[A-Z]{3}$",
+      "type": "string"
+    },
+    "in_stock": {
+      "type": "boolean"
+    },
+    "name": {
+      "type": "string"
+    },
+    "price": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "name",
+    "price",
+    "currency",
+    "in_stock"
+  ],
+  "type": "object"
+}
