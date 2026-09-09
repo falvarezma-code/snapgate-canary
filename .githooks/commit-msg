@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+# Strip AI attribution trailers from a commit message. Disclosure lives in
+# CONTRIBUTING.md, not in commits. Enable once per clone:
+#   git config core.hooksPath .githooks
+msg="$1"
+tmp="$msg.tmp"
+sed -E \
+  -e '/^Co-Authored-By: *Claude/Id' \
+  -e '/Generated with \[?Claude Code/Id' \
+  -e '/^Claude-Session:/Id' \
+  "$msg" > "$tmp"
+# Drop trailing blank lines left behind by a removed trailer block.
+awk 'BEGIN{n=0} {line[NR]=$0} END{last=NR; while(last>0 && line[last] ~ /^[[:space:]]*$/) last--; for(i=1;i<=last;i++) print line[i]}' "$tmp" > "$msg"
+rm -f "$tmp"
