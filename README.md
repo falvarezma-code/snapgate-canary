@@ -199,6 +199,17 @@ acknowledgement. Baselines are never written on `main` by any workflow.
   does not run workflows on events caused by the built-in token. Close and
   reopen the PR to run the gate, or merge on the strength of the record log.
 
+## Development
+
+```sh
+git config core.hooksPath .githooks    # once per clone: commit-msg strips attribution trailers
+actionlint .github/workflows/*.yml
+shellcheck -S style scripts/*.sh
+```
+
+Commit conventions and the disclosure of how this repository is built are in
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Setting it up in a fork
 
 1. Add the `OPENAI_API_KEY` repository secret, or delete the `openai` jobs.
