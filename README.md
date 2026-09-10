@@ -201,10 +201,13 @@ acknowledgement. Baselines are never written on `main` by any workflow.
   that has already answered something is not comparable to the baseline.
 - **The record workflow verifies what it records.** `snapgate record` does
   not run the checks on the answer it stores, so `record.yml` re-runs the
-  whole backend the way the nightly does and refuses to open a PR unless
-  every case passes. A case that fails there is either a check that rejects
-  the model's honest answer or an answer that is not reproducible on the
-  runner. It spends two hosted calls per case.
+  whole backend the way the nightly does. A check that rejects the model's
+  honest answer blocks the PR for any backend; on Ollama so does an answer
+  that differs on the second call, because Ollama answers are reproducible.
+  On OpenAI a second-call difference is listed in the PR instead of blocking
+  it: the first hosted record saw one extraction come back pretty-printed
+  instead of compact, and low-rate hosted variance is what the nightly is
+  there to record. It spends two hosted calls per case.
 - **Pull requests from the `record` workflow do not trigger `gate`.** GitHub
   does not run workflows on events caused by the built-in token. Close and
   reopen the PR to run the gate, or merge on the strength of the record log.
