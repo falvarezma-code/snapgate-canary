@@ -1,0 +1,49 @@
+{
+  "schema_version": 2,
+  "case": "codegen.parse_kv.ollama",
+  "fingerprint": "sha256:6ecb8bc0bcfbfa2336e471ce9b74fd7e3d064441d8d15944aa7b0781d27ee612",
+  "recorded_at": "2026-09-10T15:05:36Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "ollama",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "qwen2.5:1.5b",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Write the requested Python function. Reply with code only, no explanation, no markdown, no code fences."
+      },
+      {
+        "role": "user",
+        "content": "Write parse_kv(s) that parses a string like 'a=1;b=2' into a dict of string keys to string values, ignoring empty segments."
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 200,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "regex",
+      "pattern": "(?m)^def parse_kv\\("
+    },
+    {
+      "type": "max_length",
+      "value": "800"
+    },
+    {
+      "type": "exact"
+    },
+    {
+      "type": "similarity",
+      "threshold": 1
+    }
+  ],
+  "response": {
+    "text": "```python\ndef parse_kv(s):\n    return dict([i.split('=', 1) for i in s.split(';') if i])\n```",
+    "model": "qwen2.5:1.5b",
+    "finish_reason": "stop"
+  }
+}
