@@ -51,6 +51,7 @@ jq -Sn \
   --arg version "$version" \
   --arg ctx "${OLLAMA_CONTEXT_LENGTH:-default}" \
   --arg par "${OLLAMA_NUM_PARALLEL:-default}" \
+  --arg keep "${OLLAMA_KEEP_ALIVE:-default}" \
   --arg backend "$backend" \
   --arg os "$os" --arg arch "$arch" --arg cpu "$cpu" --argjson cores "$cores" \
   '{
@@ -69,6 +70,7 @@ jq -Sn \
       ollama_version: $version,
       context_length: $ctx,
       num_parallel: $par,
+      keep_alive: $keep,
       backend: $backend
     },
     host: {

@@ -16,6 +16,10 @@ inputs:
     description: OLLAMA_NUM_PARALLEL for the server. 1 keeps batching out of the numerics.
     required: false
     default: "1"
+  keep-alive:
+    description: OLLAMA_KEEP_ALIVE for the server. "0" unloads the model after every request so each one starts cold; the default keeps it loaded and lets the prompt cache take part.
+    required: false
+    default: "5m"
 runs:
   using: composite
   steps:
@@ -42,6 +46,7 @@ runs:
         OLLAMA_MODEL: ${{ inputs.model }}
         OLLAMA_CONTEXT_LENGTH: ${{ inputs.context-length }}
         OLLAMA_NUM_PARALLEL: ${{ inputs.num-parallel }}
+        OLLAMA_KEEP_ALIVE: ${{ inputs.keep-alive }}
       run: |
         export OLLAMA_MODELS="$HOME/.ollama/models"
         mkdir -p "$OLLAMA_MODELS"
@@ -60,4 +65,5 @@ runs:
         {
           echo "OLLAMA_CONTEXT_LENGTH=$OLLAMA_CONTEXT_LENGTH"
           echo "OLLAMA_NUM_PARALLEL=$OLLAMA_NUM_PARALLEL"
+          echo "OLLAMA_KEEP_ALIVE=$OLLAMA_KEEP_ALIVE"
         } >> "$GITHUB_ENV"

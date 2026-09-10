@@ -1,0 +1,63 @@
+# Diagnostic, on demand only: run one or more Ollama cases N times on the
+# runner and report how many answers were identical. The runner's CPU path
+# is the hardware that matters for the committed baselines, and the local
+# determinism script cannot see it. Nothing here writes baselines.
+name: determinism
+
+on:
+  workflow_dispatch:
+    inputs:
+      cases:
+        description: Space-separated case names (Ollama backend)
+        type: string
+        default: json.event.ollama summarize.meeting.ollama summarize.review.ollama
+      runs:
+        description: Requests per case
+        type: string
+        default: "10"
+      keep-alive:
+        description: OLLAMA_KEEP_ALIVE for the server ("0" unloads the model after every request)
+        type: string
+        default: "5m"
+
+permissions:
+  contents: read
+
+jobs:
+  determinism:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CASES: ${{ inputs.cases }}
+      RUNS: ${{ inputs.runs }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-snapgate
+      - uses: ./.github/actions/setup-ollama
+        with:
+          keep-alive: ${{ inputs.keep-alive }}
+
+      - name: Fingerprint
+        run: scripts/fingerprint.sh
+
+      - name: Run each case N times
+        run: |
+          failed=0
+          for c in $CASES; do
+            echo "== $c"
+            scripts/determinism.sh "$c" "$RUNS" || failed=$((failed + 1))
+          done
+          echo
+          if [ "$failed" -gt 0 ]; then
+            echo "::warning::$failed case(s) were not identical across $RUNS runs with OLLAMA_KEEP_ALIVE=$OLLAMA_KEEP_ALIVE"
+          else
+            echo "::notice::every case identical across $RUNS runs with OLLAMA_KEEP_ALIVE=$OLLAMA_KEEP_ALIVE"
+          fi
+
+      - name: Upload outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: determinism-${{ github.run_id }}
+          path: .determinism/
+          if-no-files-found: ignore
