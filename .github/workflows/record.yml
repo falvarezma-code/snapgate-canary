@@ -8,12 +8,17 @@
 #                re-baseline path after a drift issue or an intentional
 #                prompt or check change.
 #
-# Either way the result is verified with a second `snapgate check` before the
-# PR is opened: `record` does not run the checks on what it records, and a
-# case that does not pass right after being recorded is either a baseline
-# the checks reject or a non-deterministic answer, neither of which belongs
-# on main. Hosted cost: record mode spends two calls per case (up to 40 for
-# openai); accept mode spends one per case plus one per accepted case.
+# Either way the result is verified with a second full `snapgate check`
+# before the PR is opened: `record` does not run the checks on what it
+# records, and a case that does not pass right after being recorded is
+# either a baseline the checks reject or an answer that is not reproducible
+# on the runner, neither of which belongs on main. The verify pass runs the
+# way the nightly does: Ollama is restarted first so its prompt cache is
+# empty, and every case of the backend is sent once in config order. On the
+# runner's CPU the answer depends on that history (see
+# scripts/ollama-serve.sh), so a verify pass on a warm server or on a subset
+# of cases would disagree with the nightly for reasons that are not drift.
+# Hosted cost: two calls per case (up to 40 for openai) in either mode.
 name: record
 
 on:
@@ -72,24 +77,26 @@ jobs:
               record)
                 # shellcheck disable=SC2086
                 snapgate record --force $cases
-                verify="$cases"
                 ;;
               accept)
                 scripts/check.sh "$b" || true
-                verify=$(jq -r '.cases[] | select(.status == "drift" or .status == "stale" or .status == "missing") | .name' ".snapgate/reports/$b.json")
-                if [ -z "$verify" ]; then
+                todo=$(jq -r '.cases[] | select(.status == "drift" or .status == "stale" or .status == "missing") | .name' ".snapgate/reports/$b.json")
+                if [ -z "$todo" ]; then
                   echo "nothing to accept for $b"
                   continue
                 fi
                 # shellcheck disable=SC2086
-                snapgate accept $verify
+                snapgate accept $todo
                 ;;
             esac
 
-            echo "== verify $b"
-            if ! CASES="$(echo "$verify" | tr '\n' ' ')" REPORT_DIR=.snapgate/verify scripts/check.sh "$b"; then
+            echo "== verify $b (fresh server, every case, config order)"
+            if [ "$b" = ollama ]; then
+              scripts/ollama-serve.sh
+            fi
+            if ! REPORT_DIR=.snapgate/verify scripts/check.sh "$b"; then
               REPORT_DIR=.snapgate/verify scripts/explain-exit.sh "$b"
-              echo "::error::recorded $b baselines do not pass their own checks (a check rejects the recorded answer, or the answer is not deterministic on this runner). No PR opened."
+              echo "::error::recorded $b baselines do not pass a fresh full check (a check rejects the recorded answer, or the answer is not reproducible on this runner). No PR opened."
               exit 1
             fi
 

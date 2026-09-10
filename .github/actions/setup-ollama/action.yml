@@ -17,7 +17,7 @@ inputs:
     required: false
     default: "1"
   keep-alive:
-    description: OLLAMA_KEEP_ALIVE for the server. "0" unloads the model after every request so each one starts cold; the default keeps it loaded and lets the prompt cache take part.
+    description: OLLAMA_KEEP_ALIVE for the server. Recorded in the fingerprint; measured to make no difference to determinism.
     required: false
     default: "5m"
 runs:
@@ -48,20 +48,11 @@ runs:
         OLLAMA_NUM_PARALLEL: ${{ inputs.num-parallel }}
         OLLAMA_KEEP_ALIVE: ${{ inputs.keep-alive }}
       run: |
-        export OLLAMA_MODELS="$HOME/.ollama/models"
-        mkdir -p "$OLLAMA_MODELS"
-        nohup ollama serve > "$RUNNER_TEMP/ollama.log" 2>&1 &
-        for _ in $(seq 1 60); do
-          curl -sf http://localhost:11434/api/version >/dev/null && break
-          sleep 1
-        done
-        if ! curl -sf http://localhost:11434/api/version; then
-          echo "::error::ollama did not become ready"; cat "$RUNNER_TEMP/ollama.log"; exit 1
-        fi
-        echo
+        scripts/ollama-serve.sh
         ollama pull "$OLLAMA_MODEL"
         ollama list
-        # Exported so scripts/fingerprint.sh records the pinned settings.
+        # Exported so later steps (fingerprint.sh, a server restart) see the
+        # same pinned settings.
         {
           echo "OLLAMA_CONTEXT_LENGTH=$OLLAMA_CONTEXT_LENGTH"
           echo "OLLAMA_NUM_PARALLEL=$OLLAMA_NUM_PARALLEL"

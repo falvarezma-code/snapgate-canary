@@ -10,6 +10,11 @@
 # .snapgate/last/. No baseline is needed: a missing baseline makes `check`
 # exit 2 (status "missing"), which is fine here; the provider is still called.
 #
+# Set BEFORE_RUN to a command to execute before every request, for example
+# BEFORE_RUN=scripts/ollama-serve.sh to restart the server so each request
+# sees an empty prompt cache. Without it, run 1 is a cold prompt and runs
+# 2..N are cache hits, which on the runner's CPU is a different answer.
+#
 # Exit 0 when all N responses match, 1 otherwise. Outputs are left under
 # .determinism/<case>/ for inspection.
 set -euo pipefail
@@ -29,6 +34,9 @@ mkdir -p "$out"
 rm -f "$out"/*.txt
 
 for i in $(seq 1 "$n"); do
+  if [ -n "${BEFORE_RUN:-}" ]; then
+    $BEFORE_RUN >/dev/null
+  fi
   # Exit 2 (missing baseline) is expected; only 3 means the provider failed.
   set +e
   snapgate --config "$work/snapgate.yaml" check --json "$case_name" > "$work/report.json"

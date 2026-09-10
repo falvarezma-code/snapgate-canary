@@ -16,9 +16,13 @@ on:
         type: string
         default: "10"
       keep-alive:
-        description: OLLAMA_KEEP_ALIVE for the server ("0" unloads the model after every request)
+        description: OLLAMA_KEEP_ALIVE for the server (measured to make no difference)
         type: string
         default: "5m"
+      fresh-server:
+        description: Restart Ollama before every request, so each one sees an empty prompt cache (how record and the nightly send their first request)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -30,6 +34,7 @@ jobs:
     env:
       CASES: ${{ inputs.cases }}
       RUNS: ${{ inputs.runs }}
+      FRESH: ${{ inputs.fresh-server }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-snapgate
@@ -42,16 +47,19 @@ jobs:
 
       - name: Run each case N times
         run: |
+          before=""
+          if [ "$FRESH" = "true" ]; then before="scripts/ollama-serve.sh"; fi
           failed=0
           for c in $CASES; do
             echo "== $c"
-            scripts/determinism.sh "$c" "$RUNS" || failed=$((failed + 1))
+            BEFORE_RUN="$before" scripts/determinism.sh "$c" "$RUNS" || failed=$((failed + 1))
           done
           echo
+          mode="warm server"; [ "$FRESH" = "true" ] && mode="fresh server per request"
           if [ "$failed" -gt 0 ]; then
-            echo "::warning::$failed case(s) were not identical across $RUNS runs with OLLAMA_KEEP_ALIVE=$OLLAMA_KEEP_ALIVE"
+            echo "::warning::$failed case(s) were not identical across $RUNS runs ($mode, OLLAMA_KEEP_ALIVE=$OLLAMA_KEEP_ALIVE)"
           else
-            echo "::notice::every case identical across $RUNS runs with OLLAMA_KEEP_ALIVE=$OLLAMA_KEEP_ALIVE"
+            echo "::notice::every case identical across $RUNS runs ($mode, OLLAMA_KEEP_ALIVE=$OLLAMA_KEEP_ALIVE)"
           fi
 
       - name: Upload outputs
