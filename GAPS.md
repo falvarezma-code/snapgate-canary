@@ -127,7 +127,7 @@ both.
 | # | Gap | Canary workaround | Smallest Snapgate change |
 |---|---|---|---|
 | G1 | **No upstream fingerprint** (two asks: a per-provider describe hook, and capturing `system_fingerprint`). `response_model` is now in the JSON, which covers the hosted alias-to-snapshot case, but nothing queries Ollama `/api/tags`, `/api/show`, `/api/version`, and the OpenAI `system_fingerprint` field is dropped. | `scripts/fingerprint.sh` captures Ollama version, digest, quantization, parameter size, context length, backend (CPU/GPU), arch and CPU model; `record.yml` commits it under `fingerprints/ollama.json` and the nightly diffs it. For OpenAI, `record.yml` writes `fingerprints/openai.json` from `response.model` and the nightly compares `response_model` per case. | (a) `SystemFingerprint string \`json:"system_fingerprint,omitempty"\`` on `provider.Response`, filled from the OpenAI response. (b) Optional `Describe(ctx, model) (map[string]string, error)` on a provider; the openai-compatible provider implements it for Ollama hosts via `/api/show` and `/api/version`; stored as `upstream: {...}` in the baseline and reported as a delta by `check`. Not part of the request fingerprint. |
-| G2 | **No configurable snapshot path.** The baseline directory is hard-coded to `<config dir>/.snapgate/baselines/`. Beyond naming, this is what blocks keeping more than one baseline set per config: the Ollama backend needs one set per CPU model. | Hosted baselines stay in `.snapgate/baselines/`; Ollama sets live under `hosts/<cpu>/baselines/` and `scripts/host-baselines.sh` copies the matching one into the store before every run. | A global `--state-dir <path>` flag (or `store: <dir>` key) defaulting to `.snapgate`; the canary would pass `--state-dir hosts/<cpu>` and drop the copy step. |
+| G2 | **No configurable snapshot path.** The baseline directory is hard-coded to `<config dir>/.snapgate/baselines/`. Beyond naming, this is what blocks keeping more than one baseline set per config: the Ollama backend needs one set per CPU SIMD class. | Hosted baselines stay in `.snapgate/baselines/`; Ollama sets live under `hosts/<class>/baselines/` and `scripts/host-baselines.sh` copies the matching one into the store before every run. | A global `--state-dir <path>` flag (or `store: <dir>` key) defaulting to `.snapgate`; the canary would pass `--state-dir hosts/<class>` and drop the copy step. |
 | G3 | **No external prompt files.** Messages are inline YAML; no include or `content_file`. | Prompts live inline in `snapgate.yaml`, grouped by comment headers, one anchor per prompt reused by both backends. | `content_file: <path>` on a message, inlined at load so the fingerprint is unchanged. |
 | G4 | **No case filter by provider or group**; selection is by exact name only. | Name convention `<group>.<case>.<backend>`; workflows build the list with `yq '.cases[] \| select(.provider == "ollama") \| .name'`. | `--provider <name>` on `check` and `record`. |
 | G5 | **No retry on 429/5xx** (in TODO). A 429 is exit 3, case status `error`, message contains `HTTP 429`. | `scripts/check.sh` re-runs only cases whose error looks transient, with backoff and a call budget, and merges the JSON. | Retry in `openaicompat.Complete` on 429 and 5xx honoring `Retry-After`, bounded by `timeout`. |
@@ -167,27 +167,31 @@ Snapgate needed no change.
 ## Not gaps, but worth knowing
 
 - **On the runner's CPU, Ollama's answer depends on what its prompt cache
-  holds, and on the CPU model.** Measured 2026-09-10 with the
-  `determinism` workflow, Ollama 0.34.0, qwen2.5:1.5b Q4_K_M. On a warm
-  server (Intel Xeon Platinum 8573C, two jobs): a free-text prompt sent
-  after a different prompt gives one answer, and the same prompt repeated
-  gives another, ten times identical; `OLLAMA_KEEP_ALIVE=0` made no
-  difference. With the server restarted before every request (AMD EPYC
-  9V74): ten of ten identical for every case. The first record run failed
-  its verify pass for the cache effect (3 of 24 cases, one at 0.684
-  similarity). The first nightly then compared a set recorded on an AMD
-  EPYC 7763 against an Intel Xeon Platinum 8370C and 8 of 24 cases
-  differed, similarity down to 0.35, with the CPU the only fingerprint
-  change (issue #2). Consequences in this repo: every Ollama case is sent
-  to a freshly restarted server (`BEFORE_CASE` in `scripts/check.sh`), and
-  Ollama baselines are kept per CPU model under `hosts/<cpu>/` with
-  `scripts/host-baselines.sh` loading the right set at run time. The cache
-  part is not a Snapgate gap (no request option can choose the cache path,
-  and Ollama's `/v1` endpoint exposes none anyway, G7). The per-CPU part
-  is G2 and G1 in one: a `--state-dir` flag would replace the copy step,
-  and a baseline keyed by upstream fingerprint would replace the whole
-  script. It also means Snapgate's `samples: 2` on this backend would
-  disagree with itself.
+  holds, and on the SIMD instruction class the VM exposes.** Measured
+  2026-09-10 with the `determinism` workflow, Ollama 0.34.0, qwen2.5:1.5b
+  Q4_K_M. Cache: on a warm server a free-text prompt sent after a different
+  prompt gives one answer and the same prompt repeated gives another, ten
+  times identical; `OLLAMA_KEEP_ALIVE=0` made no difference; with the
+  server restarted before every request, ten of ten identical. The first
+  record run failed its verify pass for this (3 of 24 cases, one at 0.684
+  similarity). Instruction class: eight fresh-server runs across GitHub's
+  pool, one request per sensitive case each, gave exactly two answer
+  families for the same 8 of 24 cases. Every host exposing `avx avx2 fma
+  f16c` (AMD EPYC 7763 ×4, 9V74 ×2) produced one family byte for byte;
+  every host exposing AVX-512 (`avx512f/bw/vl/_vnni/_bf16`, AMD EPYC 9V45
+  ×2) produced the other. Two record runs on VMs both reporting "AMD EPYC
+  9V74" had landed on opposite sides, which is what ruled out the CPU model
+  as the key. Consequences in this repo: every Ollama case is sent to a
+  freshly restarted server (`BEFORE_CASE` in `scripts/check.sh`), and
+  Ollama baselines are kept per class (`avx2`, `avx512`, `amx`) under
+  `hosts/<class>/`, with `scripts/host-baselines.sh` deriving the class
+  from `/proc/cpuinfo` flags and loading the right set at run time. The
+  cache part is not a Snapgate gap (no request option can choose the cache
+  path, and Ollama's `/v1` endpoint exposes none anyway, G7). The per-class
+  part is G2 and G1 in one: a `--state-dir` flag would replace the copy
+  step, and a baseline keyed by upstream fingerprint would replace the
+  whole script. It also means Snapgate's `samples: 2` on this backend
+  would disagree with itself.
 - **Checks are in the fingerprint now.** Tightening a similarity threshold
   on a hosted case makes it `stale` and costs a re-record. Plan check edits
   with prompt edits.

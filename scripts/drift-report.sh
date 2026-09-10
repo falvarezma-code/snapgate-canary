@@ -57,7 +57,7 @@ case "$backend" in
     before="$here/hosts/$slug/fingerprint.json"
     after="$out/fingerprint.after.json"
     "$here/scripts/fingerprint.sh" "$model" > "$after"
-    printf 'Baseline set: `hosts/%s/` (baselines are per CPU model for this backend).\n\n' "$slug" >> "$fp"
+    printf 'Baseline set: `hosts/%s/` (baselines are per CPU SIMD class for this backend).\n\n' "$slug" >> "$fp"
     if [ -f "$before" ]; then
       if d=$(diff -u --label "before (committed)" --label "after (this run)" "$before" "$after"); then
         printf 'Unchanged. The model bytes, quantization, Ollama version and host are the same as when this set was recorded.\n\n```json\n%s\n```\n' "$(cat "$after")" >> "$fp"

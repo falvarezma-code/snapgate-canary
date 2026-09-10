@@ -34,7 +34,7 @@ on:
         options: [record, accept]
         default: record
       if-host-unseen:
-        description: Ollama only, record mode only. Skip when hosts/ already has a set for this runner's CPU; dispatch repeatedly to collect sets for the CPU models GitHub hands out.
+        description: Ollama only, record mode only. Skip when hosts/ already has a set for this runner's CPU SIMD class; dispatch repeatedly to collect sets for the classes GitHub hands out.
         type: boolean
         default: false
 
@@ -79,19 +79,19 @@ jobs:
             before=""
             if [ "$b" = ollama ]; then before=scripts/ollama-serve.sh; fi
             export BEFORE_CASE="$before"
-            # Ollama baselines are per CPU model (scripts/host-baselines.sh):
+            # Ollama baselines are per CPU SIMD class (scripts/host-baselines.sh):
             # load this CPU's set so accept compares against it, and save the
             # result back under hosts/<slug>/ at the end.
             if [ "$b" = ollama ]; then
               slug=$(scripts/host-baselines.sh slug)
-              echo "runner CPU: $slug"
+              echo "runner CPU class: $slug"
               if scripts/host-baselines.sh load; then
                 if [ "$MODE" = record ] && [ "$IF_HOST_UNSEEN" = true ]; then
                   echo "::notice::hosts/$slug/ already has a set and if-host-unseen is on; skipping ollama"
                   continue
                 fi
               elif [ "$MODE" = accept ]; then
-                echo "::error::no baseline set for CPU '$slug'; nothing to accept against. Use mode=record."
+                echo "::error::no baseline set for CPU class '$slug'; nothing to accept against. Use mode=record."
                 exit 1
               fi
             fi

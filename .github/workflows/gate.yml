@@ -27,8 +27,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-snapgate
       - uses: ./.github/actions/setup-ollama
-      # Ollama baselines are per CPU model (scripts/host-baselines.sh). On a
-      # CPU with no recorded set the gate has nothing to compare against and
+      # Ollama baselines are per CPU SIMD class (scripts/host-baselines.sh). On a
+      # class with no recorded set the gate has nothing to compare against and
       # passes with a warning rather than blocking the merge at random.
       - name: Load this CPU's baseline set
         id: host
@@ -38,7 +38,7 @@ jobs:
             echo "comparable=true" >> "$GITHUB_OUTPUT"
           else
             echo "comparable=false" >> "$GITHUB_OUTPUT"
-            echo "::warning title=not comparable (ollama)::this runner's CPU is '$slug' and hosts/$slug/ has no baseline set; the Ollama gate cannot run here. Re-run the job to get another runner, or record a set for this CPU."
+            echo "::warning title=not comparable (ollama)::this runner's CPU class is '$slug' and hosts/$slug/ has no baseline set; the Ollama gate cannot run here. Re-run the job to get another runner, or record a set for this class."
           fi
       - name: Check
         if: steps.host.outputs.comparable == 'true'
