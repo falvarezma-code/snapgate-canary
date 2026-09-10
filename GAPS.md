@@ -165,6 +165,19 @@ Snapgate needed no change.
 
 ## Not gaps, but worth knowing
 
+- **On the runner's CPU, Ollama's answer depends on its prompt-cache
+  history.** Measured 2026-09-10 with the `determinism` workflow on
+  `INTEL XEON PLATINUM 8573C`, Ollama 0.34.0, qwen2.5:1.5b Q4_K_M: for a
+  free-text prompt, request 1 gives one answer and requests 2 to 10 give
+  another, all identical; two separate jobs produced the same two answers;
+  `OLLAMA_KEEP_ALIVE=0` made no difference. The first record run failed its
+  verify pass for exactly this reason (3 of 24 cases, one at 0.684
+  similarity). Both `record.yml` and the nightly therefore start from a
+  fresh server and send every case once in config order, and `record.yml`
+  restarts the server before verifying. Not a Snapgate gap: no request
+  option can make a cached prompt take the uncached path, and Ollama's
+  `/v1` endpoint exposes none anyway (G7). It does mean a Snapgate `samples:
+  2` on this backend would always disagree with itself.
 - **Checks are in the fingerprint now.** Tightening a similarity threshold
   on a hosted case makes it `stale` and costs a re-record. Plan check edits
   with prompt edits.

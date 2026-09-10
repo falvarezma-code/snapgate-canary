@@ -21,7 +21,7 @@ v0.1.1: a config, committed baselines, and three workflows.
 | [`.snapgate/baselines/`](.snapgate/baselines/) | The snapshots. One JSON file per case: the exact request, the checks, the fingerprint, and the answer. Written only by the `record` workflow, on a runner. |
 | [`fingerprints/`](fingerprints/) | What the upstream was when the baselines were recorded: model digest and quantization, Ollama version, context length, CPU. Snapgate does not record this; [`scripts/fingerprint.sh`](scripts/fingerprint.sh) does. |
 | [`schemas/`](schemas/) | JSON Schemas for the extraction group. |
-| [`scripts/`](scripts/) | `check.sh` (one backend, retries transient errors within a budget), `drift-report.sh` (issue body and dedupe key), `explain-exit.sh` (statuses to annotations), `fingerprint.sh`, `determinism.sh` (local experiments only). |
+| [`scripts/`](scripts/) | `check.sh` (one backend, retries transient errors within a budget), `drift-report.sh` (issue body and dedupe key), `explain-exit.sh` (statuses to annotations), `fingerprint.sh`, `ollama-serve.sh` (start or restart the server with the pinned settings), `determinism.sh` (experiments; the `determinism` workflow runs it on a runner). |
 | [`.github/workflows/gate.yml`](.github/workflows/gate.yml) | On every pull request: check both backends. Anything but `pass` blocks the merge. |
 | [`.github/workflows/canary.yml`](.github/workflows/canary.yml) | Nightly and on demand: check both backends, file or update drift issues. |
 | [`.github/workflows/record.yml`](.github/workflows/record.yml) | On demand: record or accept baselines on the runner, verify them, open a pull request. |
@@ -189,12 +189,23 @@ acknowledgement. Baselines are never written on `main` by any workflow.
 - **Hosted answers at temperature 0 with a seed are close to deterministic,
   not deterministic.** That is why summaries and code on `openai` use a
   similarity threshold. The similarity score is in every issue.
+- **On the runner's CPU, the answer depends on the server's history.** The
+  first time Ollama sees a prompt it processes it in one batch; a repeat, or
+  a prompt sharing a prefix with one already cached, reuses cached state and
+  takes a different numeric path, and greedy decoding can diverge. Measured
+  on the runner with the `determinism` workflow: run 1 of a prompt gives one
+  answer, runs 2 to 10 give another, all identical, and two separate jobs
+  produced the same two answers. So the model is reproducible as long as
+  the history is: every comparison here starts from a fresh server and sends
+  the cases once, in config order. A single-case `snapgate check` on a warm
+  server is not comparable to the baseline, and a retried Ollama case can
+  report drift for that reason; re-run the job.
 - **The record workflow verifies what it records.** `snapgate record` does
-  not run the checks on the answer it stores, so `record.yml` runs a second
-  check and refuses to open a PR unless every recorded case passes. A case
-  that fails there is either a check that rejects the model's honest answer
-  or an answer that is not deterministic on the runner. Record mode spends
-  two hosted calls per case.
+  not run the checks on the answer it stores, so `record.yml` restarts
+  Ollama, re-runs the whole backend the way the nightly does, and refuses
+  to open a PR unless every case passes. A case that fails there is either
+  a check that rejects the model's honest answer or an answer that is not
+  reproducible on the runner. It spends two hosted calls per case.
 - **Pull requests from the `record` workflow do not trigger `gate`.** GitHub
   does not run workflows on events caused by the built-in token. Close and
   reopen the PR to run the gate, or merge on the strength of the record log.
