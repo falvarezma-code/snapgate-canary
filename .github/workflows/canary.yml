@@ -46,8 +46,8 @@ jobs:
           echo "::error::OPENAI_API_KEY secret is not set; this is a canary configuration error, not drift"
           exit 1
 
-      # Ollama baselines are per CPU model (scripts/host-baselines.sh). A
-      # runner whose CPU has no recorded set has nothing to compare against;
+      # Ollama baselines are per CPU SIMD class (scripts/host-baselines.sh). A
+      # runner whose class has no recorded set has nothing to compare against;
       # that is neither drift nor an error, so the job says so and stays green.
       - name: Load this CPU's baseline set
         id: host
@@ -59,7 +59,7 @@ jobs:
             echo "comparable=true" >> "$GITHUB_OUTPUT"
           else
             echo "comparable=false" >> "$GITHUB_OUTPUT"
-            echo "::warning title=not comparable (ollama)::this runner's CPU is '$slug' and hosts/$slug/ has no baseline set; nothing to compare. Run the record workflow with if-host-unseen=true until a run lands on this CPU."
+            echo "::warning title=not comparable (ollama)::this runner's CPU class is '$slug' and hosts/$slug/ has no baseline set; nothing to compare. Run the record workflow with if-host-unseen=true until a run lands on this class."
           fi
 
       - name: Check
