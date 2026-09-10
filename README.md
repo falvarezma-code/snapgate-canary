@@ -19,10 +19,10 @@ v0.1.1: a config, committed baselines, and three workflows.
 |---|---|
 | [`snapgate.yaml`](snapgate.yaml) | Two providers (`ollama`, `openai`), 24 prompts in four groups, 44 cases. Each prompt is a YAML anchor shared by both backends. |
 | [`.snapgate/baselines/`](.snapgate/baselines/) | The snapshots for the hosted backend. One JSON file per case: the exact request, the checks, the fingerprint, and the answer. Written only by the `record` workflow, on a runner. |
-| [`hosts/<cpu>/`](hosts/) | The Ollama snapshots, one set per CPU model, each with the upstream fingerprint it was recorded against: model digest and quantization, Ollama version, context length, CPU. [`scripts/host-baselines.sh`](scripts/host-baselines.sh) copies the matching set into place before a comparison. |
+| [`hosts/<class>/`](hosts/) | The Ollama snapshots, one set per CPU SIMD class (`avx2`, `avx512`, `amx`), each with the upstream fingerprint it was recorded against: model digest and quantization, Ollama version, context length, CPU model and flags. [`scripts/host-baselines.sh`](scripts/host-baselines.sh) copies the matching set into place before a comparison. |
 | [`fingerprints/`](fingerprints/) | The hosted backend's identity at record time: the alias requested and the dated model the endpoint reported. Snapgate does not record this; [`scripts/fingerprint.sh`](scripts/fingerprint.sh) does the Ollama side. |
 | [`schemas/`](schemas/) | JSON Schemas for the extraction group. |
-| [`scripts/`](scripts/) | `check.sh` (one backend, retries transient errors within a budget), `drift-report.sh` (issue body and dedupe key), `explain-exit.sh` (statuses to annotations), `fingerprint.sh`, `ollama-serve.sh` (start or restart the server with the pinned settings), `host-baselines.sh` (per-CPU Ollama baseline sets), `determinism.sh` (experiments; the `determinism` workflow runs it on a runner). |
+| [`scripts/`](scripts/) | `check.sh` (one backend, retries transient errors within a budget), `drift-report.sh` (issue body and dedupe key), `explain-exit.sh` (statuses to annotations), `fingerprint.sh`, `ollama-serve.sh` (start or restart the server with the pinned settings), `host-baselines.sh` (Ollama baseline sets per SIMD class), `determinism.sh` (experiments; the `determinism` workflow runs it on a runner). |
 | [`.github/workflows/gate.yml`](.github/workflows/gate.yml) | On every pull request: check both backends. Anything but `pass` blocks the merge. |
 | [`.github/workflows/canary.yml`](.github/workflows/canary.yml) | Nightly and on demand: check both backends, file or update drift issues. |
 | [`.github/workflows/record.yml`](.github/workflows/record.yml) | On demand: record or accept baselines on the runner, verify them, open a pull request. |
@@ -33,7 +33,7 @@ v0.1.1: a config, committed baselines, and three workflows.
 | | `ollama` | `openai` |
 |---|---|---|
 | Model | `qwen2.5:1.5b`, Q4_K_M, pulled unpinned by tag | `gpt-4o-mini`, the alias, so provider-side version changes are observed |
-| Where | Installed on the runner, keyless, `OLLAMA_CONTEXT_LENGTH=2048`, `OLLAMA_NUM_PARALLEL=1`, restarted before every case; baselines per CPU model | `https://api.openai.com/v1` with the `OPENAI_API_KEY` secret |
+| Where | Installed on the runner, keyless, `OLLAMA_CONTEXT_LENGTH=2048`, `OLLAMA_NUM_PARALLEL=1`, restarted before every case; baselines per CPU SIMD class | `https://api.openai.com/v1` with the `OPENAI_API_KEY` secret |
 | Cases | all 24 | 20; at most 24 requests per check run including retries |
 | Baseline check | `exact` | `exact` for extraction and classification, `similarity ≥ 0.9` for summaries and code |
 | Params | temperature 0, seed 42, per-group `max_tokens` | same |
@@ -54,7 +54,7 @@ differently, and only one of them is news.
 | 2 | `stale` | a prompt, parameter, or check changed and the baseline was not re-recorded | fail the job, no issue |
 | 2 | `missing` | no baseline recorded | fail the job, no issue |
 | 3 | `error` | provider or config error: network, 429, missing key | retry transient errors, then fail the job, no issue |
-| | not comparable | the runner's CPU has no recorded Ollama baseline set | skip the Ollama comparison with a warning; job green |
+| | not comparable | the runner's CPU SIMD class has no recorded Ollama baseline set | skip the Ollama comparison with a warning; job green |
 
 A red badge therefore means the canary itself needs attention. Drift is in
 the issues, not the badge.
@@ -184,15 +184,20 @@ acknowledgement. Baselines are never written on `main` by any workflow.
 
 ## Things to know before trusting a red badge
 
-- **For a local model, the CPU is part of the upstream.** GitHub hands out
-  several CPU models, and qwen2.5:1.5b on the CPU path answers differently
-  on different ones: the first nightly compared baselines recorded on an
-  AMD EPYC 7763 against answers from an Intel Xeon Platinum 8370C and 8 of
-  24 cases differed, with similarity as low as 0.35 ([issue #2](https://github.com/falvarezma-code/snapgate-canary/issues/2)).
-  So Ollama baselines are kept per CPU model under `hosts/<cpu>/`, each
+- **For a local model, the CPU's instruction set is part of the upstream.**
+  qwen2.5:1.5b on the CPU path has exactly two answers for 8 of the 24
+  prompts, and which one a machine gives is decided by the SIMD
+  instructions the VM exposes, which select the kernels Ollama runs. Eight
+  determinism runs on GitHub's pool: every host exposing only AVX2 (AMD
+  EPYC 7763 and 9V74) gave one identical set, every host exposing AVX-512
+  (AMD EPYC 9V45) gave the other, and two VMs reporting the same CPU model
+  can sit on different sides. The first nightly hit this across the two
+  classes: 8 of 24 differed, similarity as low as 0.35
+  ([issue #2](https://github.com/falvarezma-code/snapgate-canary/issues/2)).
+  So Ollama baselines are kept per SIMD class under `hosts/<class>/`, each
   with the fingerprint it was recorded against, and a run loads the set
-  for the CPU it landed on. A CPU with no set is reported as not comparable
-  and the job stays green; run the `record` workflow with
+  for the class it landed on. A class with no set is reported as not
+  comparable and the job stays green; run the `record` workflow with
   `if-host-unseen` until a run lands on it. The hosted backend is
   CPU-independent and has one set.
 - **On the runner's CPU, the answer also depends on what Ollama's prompt
@@ -241,7 +246,8 @@ Commit conventions and the disclosure of how this repository is built are in
    merge its PR. That is the first set of baselines. Then run it a few more
    times with `backend: ollama`, `if-host-unseen: true`, merging each PR,
    until the nightly stops reporting "not comparable": each run records a
-   set for whichever CPU model it lands on.
+   set for whichever SIMD class it lands on. Three classes cover GitHub's
+   current pool.
 4. Branch protection on `main`: require the checks `snapgate check (ollama)`
    and `snapgate check (openai)`.
 
