@@ -1,0 +1,45 @@
+{
+  "schema_version": 2,
+  "case": "classify.topic.ollama",
+  "fingerprint": "sha256:4c16dc2501eb3240208b98696643acc19ad02e98e59733e35a672f452b33c853",
+  "recorded_at": "2026-09-10T13:39:18Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "ollama",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "qwen2.5:1.5b",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Classify the support message by topic. Reply with exactly one word from this list: billing, technical, account, sales. Lowercase, no punctuation, nothing else."
+      },
+      {
+        "role": "user",
+        "content": "I was charged twice for the same month and I want the duplicate charge reversed."
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 8,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "regex",
+      "pattern": "^(billing|technical|account|sales)\\s*$"
+    },
+    {
+      "type": "exact"
+    },
+    {
+      "type": "similarity",
+      "threshold": 1
+    }
+  ],
+  "response": {
+    "text": "billing",
+    "model": "qwen2.5:1.5b",
+    "finish_reason": "stop"
+  }
+}

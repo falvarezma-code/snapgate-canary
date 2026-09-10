@@ -1,0 +1,48 @@
+{
+  "schema_version": 2,
+  "case": "json.order.ollama",
+  "fingerprint": "sha256:6d98ce39b9b8370d4385b192fddb915a50dd01bd4bdd688c5d410756b5ee533f",
+  "recorded_at": "2026-09-10T13:38:39Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "ollama",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "qwen2.5:1.5b",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Extract the order from the message. Reply with a single JSON object with keys order_id (string), item (string), quantity (integer), issue (string). Compact, on a single line, no whitespace outside string values. JSON only, no markdown, no code fences, no commentary."
+      },
+      {
+        "role": "user",
+        "content": "Hi, order 4821, I got 2 mugs and one of them is cracked."
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 120,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "json_valid"
+    },
+    {
+      "type": "json_schema",
+      "schema": "schemas/order.json"
+    },
+    {
+      "type": "exact"
+    },
+    {
+      "type": "similarity",
+      "threshold": 1
+    }
+  ],
+  "response": {
+    "text": "{\n  \"order_id\": \"4821\",\n  \"item\": \"mugs\",\n  \"quantity\": 2,\n  \"issue\": \"cracked\"\n}",
+    "model": "qwen2.5:1.5b",
+    "finish_reason": "stop"
+  }
+}

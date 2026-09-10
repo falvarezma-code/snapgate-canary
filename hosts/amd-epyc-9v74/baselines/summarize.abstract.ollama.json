@@ -1,0 +1,53 @@
+{
+  "schema_version": 2,
+  "case": "summarize.abstract.ollama",
+  "fingerprint": "sha256:6292cbd0da8a4ef4ac90bff3f1f364b1096b14e5906433eab1c916648637662b",
+  "recorded_at": "2026-09-10T13:39:37Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "ollama",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "qwen2.5:1.5b",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Summarize the text in one sentence of at most 25 words. Plain text only, no preamble, no bullet points."
+      },
+      {
+        "role": "user",
+        "content": "We measured how often three small language models change their answer to a fixed prompt across 30 days. With greedy decoding and a fixed seed, local models were stable, while hosted models changed 3 to 8 percent of outputs, usually after undocumented backend updates."
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 80,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "max_length",
+      "value": "300"
+    },
+    {
+      "type": "min_length",
+      "value": "20"
+    },
+    {
+      "type": "not_contains",
+      "value": "Here is"
+    },
+    {
+      "type": "exact"
+    },
+    {
+      "type": "similarity",
+      "threshold": 1
+    }
+  ],
+  "response": {
+    "text": "Three small language models changed their answers to a fixed prompt 3 to 8 percent of the time, usually after undocumented backend updates.",
+    "model": "qwen2.5:1.5b",
+    "finish_reason": "stop"
+  }
+}

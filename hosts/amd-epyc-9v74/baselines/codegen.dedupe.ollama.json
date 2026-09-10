@@ -1,0 +1,49 @@
+{
+  "schema_version": 2,
+  "case": "codegen.dedupe.ollama",
+  "fingerprint": "sha256:afc883deb719bc8dc5e1eafdd7088cf71203060f8371d194a39cdfb6e68850e0",
+  "recorded_at": "2026-09-10T13:40:02Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "ollama",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "qwen2.5:1.5b",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Write the requested Python function. Reply with code only, no explanation, no markdown, no code fences."
+      },
+      {
+        "role": "user",
+        "content": "Write dedupe(items) that returns a new list with duplicates removed, keeping the first occurrence and preserving order."
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 200,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "regex",
+      "pattern": "(?m)^def dedupe\\("
+    },
+    {
+      "type": "max_length",
+      "value": "800"
+    },
+    {
+      "type": "exact"
+    },
+    {
+      "type": "similarity",
+      "threshold": 1
+    }
+  ],
+  "response": {
+    "text": "```python\ndef dedupe(items):\n    seen = set()\n    output = []\n    for item in items:\n        if item not in seen:\n            seen.add(item)\n            output.append(item)\n    return output\n```",
+    "model": "qwen2.5:1.5b",
+    "finish_reason": "stop"
+  }
+}
