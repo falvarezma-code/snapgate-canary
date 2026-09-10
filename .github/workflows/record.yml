@@ -10,14 +10,14 @@
 #
 # Either way the result is verified with a second full `snapgate check`
 # before the PR is opened: `record` does not run the checks on what it
-# records, and a case that does not pass right after being recorded is
-# either a baseline the checks reject or an answer that is not reproducible
-# on the runner, neither of which belongs on main. Ollama cases are sent
-# one at a time, each after a server restart, in record, verify, and the
-# nightly alike: on the runner's CPU the answer depends on what the prompt
-# cache already holds (see scripts/ollama-serve.sh), and an empty cache is
-# the only state measured reproducible across runs and across CPU models.
-# Hosted cost: two calls per case (up to 40 for openai) in either mode.
+# records. A baseline the checks reject, a stale or missing case, or a
+# provider error blocks the PR for any backend. A second call that simply
+# answers differently blocks only for Ollama, whose answers are measured
+# reproducible (cases are sent one at a time, each after a server restart,
+# in record, verify, and the nightly alike; see scripts/ollama-serve.sh).
+# For a hosted backend that difference is expected at a low rate, is the
+# canary's subject, and is listed in the PR body instead so the reviewer
+# sees it. Hosted cost: two calls per case (up to 40 for openai).
 name: record
 
 on:
@@ -95,10 +95,20 @@ jobs:
             esac
 
             echo "== verify $b (every case, fresh server per case)"
-            if ! REPORT_DIR=.snapgate/verify scripts/check.sh "$b"; then
+            REPORT_DIR=.snapgate/verify scripts/check.sh "$b" || true
+            vr=".snapgate/verify/$b.json"
+            count() { jq -r "[.cases[] | select($1)] | length" "$vr"; }
+            blocking=$(count '.status == "error" or .status == "stale" or .status == "missing" or (.status == "drift" and .diff == "")')
+            unstable=$(count '.status == "drift" and .diff != ""')
+            if [ "$b" = ollama ]; then blocking=$((blocking + unstable)); unstable=0; fi
+            if [ "$blocking" != "0" ]; then
               REPORT_DIR=.snapgate/verify scripts/explain-exit.sh "$b"
-              echo "::error::recorded $b baselines do not pass a fresh full check (a check rejects the recorded answer, or the answer is not reproducible on this runner). No PR opened."
+              echo "::error::recorded $b baselines do not pass a fresh full check. No PR opened."
               exit 1
+            fi
+            if [ "$unstable" != "0" ]; then
+              echo "::warning::$unstable $b case(s) answered differently on the second call; recorded anyway, listed in the PR"
+              jq -r '.cases[] | select(.status == "drift" and .diff != "") | "- `\(.name)` (similarity \(.score // "n/a")): second call differed\n\n```diff\n\(.diff)```\n"' "$vr" >> "$RUNNER_TEMP/unstable-$b.md"
             fi
 
             case "$b" in
@@ -148,6 +158,14 @@ jobs:
               cat "$f"
               echo '```'
               echo
+            done
+            for f in "$RUNNER_TEMP"/unstable-*.md; do
+              [ -f "$f" ] || continue
+              echo "## Not reproducible on the second call ($(basename "$f" .md | sed 's/unstable-//'))"
+              echo
+              echo "These baselines are the first answer. The verify pass, sent seconds later, got a different one. Expect the nightly to report drift on them until the upstream settles or the checks are loosened."
+              echo
+              cat "$f"
             done
             echo "Note: pull requests opened with the built-in token do not trigger the \`gate\` workflow. Close and reopen this PR to run it, or merge on the strength of the record log."
           } > "$RUNNER_TEMP/pr.md"
