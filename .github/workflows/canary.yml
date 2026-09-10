@@ -46,8 +46,25 @@ jobs:
           echo "::error::OPENAI_API_KEY secret is not set; this is a canary configuration error, not drift"
           exit 1
 
+      # Ollama baselines are per CPU model (scripts/host-baselines.sh). A
+      # runner whose CPU has no recorded set has nothing to compare against;
+      # that is neither drift nor an error, so the job says so and stays green.
+      - name: Load this CPU's baseline set
+        id: host
+        if: matrix.backend == 'ollama'
+        run: |
+          slug=$(scripts/host-baselines.sh slug)
+          echo "slug=$slug" >> "$GITHUB_OUTPUT"
+          if scripts/host-baselines.sh load; then
+            echo "comparable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "comparable=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=not comparable (ollama)::this runner's CPU is '$slug' and hosts/$slug/ has no baseline set; nothing to compare. Run the record workflow with if-host-unseen=true until a run lands on this CPU."
+          fi
+
       - name: Check
         id: check
+        if: matrix.backend != 'ollama' || steps.host.outputs.comparable == 'true'
         run: |
           set +e
           scripts/check.sh "$BACKEND"
@@ -65,11 +82,11 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Build drift report
-        if: steps.check.outputs.drift != '0'
+        if: steps.check.conclusion == 'success' && steps.check.outputs.drift != '0'
         run: scripts/drift-report.sh "$BACKEND" ".snapgate/reports/$BACKEND.json" "$RUNNER_TEMP/drift"
 
       - name: Open or update the drift issue
-        if: steps.check.outputs.drift != '0'
+        if: steps.check.conclusion == 'success' && steps.check.outputs.drift != '0'
         env:
           OUT: ${{ runner.temp }}/drift
         run: |
@@ -109,9 +126,10 @@ jobs:
 
       - name: Fail on anything that is not drift
         if: >-
+          steps.check.conclusion == 'success' && (
           steps.check.outputs.error != '0' || steps.check.outputs.stale != '0' ||
           steps.check.outputs.missing != '0' || steps.check.outputs.empty_drift != '0' ||
-          steps.check.outputs.code == ''
+          steps.check.outputs.code == '')
         env:
           ERRORS: ${{ steps.check.outputs.error }}
           STALE: ${{ steps.check.outputs.stale }}

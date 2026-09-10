@@ -33,6 +33,10 @@ on:
         type: choice
         options: [record, accept]
         default: record
+      if-host-unseen:
+        description: Ollama only, record mode only. Skip when hosts/ already has a set for this runner's CPU; dispatch repeatedly to collect sets for the CPU models GitHub hands out.
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -50,6 +54,7 @@ jobs:
     env:
       BACKEND: ${{ inputs.backend }}
       MODE: ${{ inputs.mode }}
+      IF_HOST_UNSEEN: ${{ inputs.if-host-unseen }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       GH_TOKEN: ${{ github.token }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -74,6 +79,22 @@ jobs:
             before=""
             if [ "$b" = ollama ]; then before=scripts/ollama-serve.sh; fi
             export BEFORE_CASE="$before"
+            # Ollama baselines are per CPU model (scripts/host-baselines.sh):
+            # load this CPU's set so accept compares against it, and save the
+            # result back under hosts/<slug>/ at the end.
+            if [ "$b" = ollama ]; then
+              slug=$(scripts/host-baselines.sh slug)
+              echo "runner CPU: $slug"
+              if scripts/host-baselines.sh load; then
+                if [ "$MODE" = record ] && [ "$IF_HOST_UNSEEN" = true ]; then
+                  echo "::notice::hosts/$slug/ already has a set and if-host-unseen is on; skipping ollama"
+                  continue
+                fi
+              elif [ "$MODE" = accept ]; then
+                echo "::error::no baseline set for CPU '$slug'; nothing to accept against. Use mode=record."
+                exit 1
+              fi
+            fi
             echo "== $MODE $b"
             case "$MODE" in
               record)
@@ -113,16 +134,17 @@ jobs:
 
             case "$b" in
               ollama)
-                scripts/fingerprint.sh > fingerprints/ollama.json
+                scripts/host-baselines.sh save
+                cat "hosts/$slug/fingerprint.json"
                 ;;
               openai)
                 # Hosted identity is whatever the endpoint reports back.
                 for c in $cases; do cat ".snapgate/baselines/$c.json"; done \
                   | jq -s '{alias: (map(.request.model) | unique), resolved_model: (map(.response.model) | unique)}' \
                   > fingerprints/openai.json
+                cat fingerprints/openai.json
                 ;;
             esac
-            cat "fingerprints/$b.json"
           done
 
       - name: Open a pull request
@@ -131,7 +153,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           branch="snapshots/$MODE-$BACKEND-$(date -u +%Y%m%d)-$GITHUB_RUN_ID"
           git checkout -b "$branch"
-          git add .snapgate/baselines fingerprints
+          git add .snapgate/baselines fingerprints hosts
           if git diff --cached --quiet; then
             echo "::notice::no baseline or fingerprint changed; nothing to open"
             exit 0
@@ -150,8 +172,9 @@ jobs:
             echo "$changed"
             echo '```'
             echo
-            for f in fingerprints/*.json; do
+            for f in fingerprints/*.json hosts/*/fingerprint.json; do
               [ -f "$f" ] || continue
+              case "$changed" in *"$(dirname "$f")"*) ;; *) continue ;; esac
               echo "## $f"
               echo
               echo '```json'
