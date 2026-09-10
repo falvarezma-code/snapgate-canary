@@ -1,0 +1,50 @@
+{
+  "schema_version": 2,
+  "case": "summarize.review.openai",
+  "fingerprint": "sha256:a26844ba0e641b5b6fe95f99febc4d2b9ff0fe39db0f0d5951fc5294c2955a80",
+  "recorded_at": "2026-09-10T12:06:05Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "openai",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Summarize the text in one sentence of at most 25 words. Plain text only, no preamble, no bullet points."
+      },
+      {
+        "role": "user",
+        "content": "I bought the Aurora lamp for my desk. The light is warm and the dimmer is smooth, but the base is lighter than it looks and it tipped over twice when I bumped the desk. Good lamp, wobbly stand."
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 80,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "max_length",
+      "value": "300"
+    },
+    {
+      "type": "min_length",
+      "value": "20"
+    },
+    {
+      "type": "not_contains",
+      "value": "Here is"
+    },
+    {
+      "type": "similarity",
+      "threshold": 0.9
+    }
+  ],
+  "response": {
+    "text": "The Aurora lamp has a warm light and smooth dimmer, but its lightweight base makes it prone to tipping over.",
+    "model": "gpt-4o-mini-2024-07-18",
+    "finish_reason": "stop"
+  }
+}

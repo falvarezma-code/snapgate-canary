@@ -1,0 +1,45 @@
+{
+  "schema_version": 2,
+  "case": "classify.intent.ollama",
+  "fingerprint": "sha256:fcb80ee0dd6751350d91bb9b3cb2d0571594ba44205ec0782b4ad8ef038cb458",
+  "recorded_at": "2026-09-10T12:02:39Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "ollama",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "qwen2.5:1.5b",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Classify the customer's intent. Reply with exactly one word from this list: refund, cancel, shipping, other. Lowercase, no punctuation, nothing else."
+      },
+      {
+        "role": "user",
+        "content": "I ordered this three weeks ago and the tracking page still says label created. Where is it?"
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 8,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "regex",
+      "pattern": "^(refund|cancel|shipping|other)\\s*$"
+    },
+    {
+      "type": "exact"
+    },
+    {
+      "type": "similarity",
+      "threshold": 1
+    }
+  ],
+  "response": {
+    "text": "shipping",
+    "model": "qwen2.5:1.5b",
+    "finish_reason": "stop"
+  }
+}

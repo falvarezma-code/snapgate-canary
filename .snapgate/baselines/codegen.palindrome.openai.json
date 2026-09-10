@@ -1,0 +1,46 @@
+{
+  "schema_version": 2,
+  "case": "codegen.palindrome.openai",
+  "fingerprint": "sha256:18a6343877fa281b485ae9aeb5dbce07ae6ab7d4edf78616d3a7f209fdff9549",
+  "recorded_at": "2026-09-10T12:06:07Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "openai",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Write the requested Python function. Reply with code only, no explanation, no markdown, no code fences."
+      },
+      {
+        "role": "user",
+        "content": "Write is_palindrome(s) that returns True if s reads the same forwards and backwards, ignoring case and non-alphanumeric characters."
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 200,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "regex",
+      "pattern": "(?m)^def is_palindrome\\("
+    },
+    {
+      "type": "max_length",
+      "value": "800"
+    },
+    {
+      "type": "similarity",
+      "threshold": 0.9
+    }
+  ],
+  "response": {
+    "text": "def is_palindrome(s):\n    filtered_chars = ''.join(c.lower() for c in s if c.isalnum())\n    return filtered_chars == filtered_chars[::-1]",
+    "model": "gpt-4o-mini-2024-07-18",
+    "finish_reason": "stop"
+  }
+}

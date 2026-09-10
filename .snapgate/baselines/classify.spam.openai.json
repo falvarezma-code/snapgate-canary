@@ -1,0 +1,45 @@
+{
+  "schema_version": 2,
+  "case": "classify.spam.openai",
+  "fingerprint": "sha256:239732e4173a815ad859905da3d6916e3a7ce11a4721946220c8ab2b21304063",
+  "recorded_at": "2026-09-10T12:05:57Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "openai",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Classify the email. Reply with exactly one word from this list: spam, ham. Lowercase, no punctuation, nothing else."
+      },
+      {
+        "role": "user",
+        "content": "Congratulations! You have been selected for a limited cash reward. Click the link within 24 hours to claim."
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 8,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "regex",
+      "pattern": "^(spam|ham)\\s*$"
+    },
+    {
+      "type": "exact"
+    },
+    {
+      "type": "similarity",
+      "threshold": 1
+    }
+  ],
+  "response": {
+    "text": "spam",
+    "model": "gpt-4o-mini-2024-07-18",
+    "finish_reason": "stop"
+  }
+}

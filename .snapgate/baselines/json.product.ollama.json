@@ -1,0 +1,48 @@
+{
+  "schema_version": 2,
+  "case": "json.product.ollama",
+  "fingerprint": "sha256:b6262f0fb126151d25b8fefe4ad45403131da4ff8299b416938f3ebf4d941deb",
+  "recorded_at": "2026-09-10T12:02:26Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "ollama",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "qwen2.5:1.5b",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Extract the product from the message. Reply with a single JSON object with keys name (string), price (number), currency (string, 3-letter code), in_stock (boolean). Compact, on a single line, no whitespace outside string values. JSON only, no markdown, no code fences, no commentary."
+      },
+      {
+        "role": "user",
+        "content": "The Aurora desk lamp is EUR 49.90 and is back in stock as of today."
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 120,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "json_valid"
+    },
+    {
+      "type": "json_schema",
+      "schema": "schemas/product.json"
+    },
+    {
+      "type": "exact"
+    },
+    {
+      "type": "similarity",
+      "threshold": 1
+    }
+  ],
+  "response": {
+    "text": "{\n  \"name\": \"The Aurora desk lamp\",\n  \"price\": 49.90,\n  \"currency\": \"EUR\",\n  \"in_stock\": true\n}",
+    "model": "qwen2.5:1.5b",
+    "finish_reason": "stop"
+  }
+}

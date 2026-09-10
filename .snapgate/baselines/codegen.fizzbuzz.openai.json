@@ -1,0 +1,46 @@
+{
+  "schema_version": 2,
+  "case": "codegen.fizzbuzz.openai",
+  "fingerprint": "sha256:9fb28988df8673f4052e3c7b9b187c32292016a95cee91c6d347728b5aa94341",
+  "recorded_at": "2026-09-10T12:06:08Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "openai",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Write the requested Python function. Reply with code only, no explanation, no markdown, no code fences."
+      },
+      {
+        "role": "user",
+        "content": "Write fizzbuzz(n) that returns a list of strings for 1 through n: 'Fizz' for multiples of 3, 'Buzz' for multiples of 5, 'FizzBuzz' for both, otherwise the number as a string."
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 200,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "regex",
+      "pattern": "(?m)^def fizzbuzz\\("
+    },
+    {
+      "type": "max_length",
+      "value": "800"
+    },
+    {
+      "type": "similarity",
+      "threshold": 0.9
+    }
+  ],
+  "response": {
+    "text": "def fizzbuzz(n):\n    return ['FizzBuzz' if i % 3 == 0 and i % 5 == 0 else 'Fizz' if i % 3 == 0 else 'Buzz' if i % 5 == 0 else str(i) for i in range(1, n + 1)]",
+    "model": "gpt-4o-mini-2024-07-18",
+    "finish_reason": "stop"
+  }
+}

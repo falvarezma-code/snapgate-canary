@@ -1,0 +1,46 @@
+{
+  "schema_version": 2,
+  "case": "codegen.slugify.openai",
+  "fingerprint": "sha256:745cf2450a743e6c2176037caaaef59b0b0e4f7f904ffde16cf8fb630e5d61b7",
+  "recorded_at": "2026-09-10T12:06:09Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "openai",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Write the requested Python function. Reply with code only, no explanation, no markdown, no code fences."
+      },
+      {
+        "role": "user",
+        "content": "Write slugify(title) that lowercases the string, replaces runs of non-alphanumeric characters with a single hyphen, and strips leading and trailing hyphens."
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 200,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "regex",
+      "pattern": "(?m)^def slugify\\("
+    },
+    {
+      "type": "max_length",
+      "value": "800"
+    },
+    {
+      "type": "similarity",
+      "threshold": 0.9
+    }
+  ],
+  "response": {
+    "text": "def slugify(title):\n    import re\n    title = title.lower()\n    title = re.sub(r'[^a-z0-9]+', '-', title)\n    title = title.strip('-')\n    return title",
+    "model": "gpt-4o-mini-2024-07-18",
+    "finish_reason": "stop"
+  }
+}

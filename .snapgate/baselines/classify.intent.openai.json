@@ -1,0 +1,45 @@
+{
+  "schema_version": 2,
+  "case": "classify.intent.openai",
+  "fingerprint": "sha256:ac1ec54c24634cb6b3e1ed2852876568c12308c758bf97ed9db9e8f18eeaa6a0",
+  "recorded_at": "2026-09-10T12:05:54Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "openai",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Classify the customer's intent. Reply with exactly one word from this list: refund, cancel, shipping, other. Lowercase, no punctuation, nothing else."
+      },
+      {
+        "role": "user",
+        "content": "I ordered this three weeks ago and the tracking page still says label created. Where is it?"
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 8,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "regex",
+      "pattern": "^(refund|cancel|shipping|other)\\s*$"
+    },
+    {
+      "type": "exact"
+    },
+    {
+      "type": "similarity",
+      "threshold": 1
+    }
+  ],
+  "response": {
+    "text": "shipping",
+    "model": "gpt-4o-mini-2024-07-18",
+    "finish_reason": "stop"
+  }
+}

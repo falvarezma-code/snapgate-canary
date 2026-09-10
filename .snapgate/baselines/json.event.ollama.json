@@ -1,0 +1,48 @@
+{
+  "schema_version": 2,
+  "case": "json.event.ollama",
+  "fingerprint": "sha256:5eb6392d189442a6f138cc99c616e38b5e42b198e9dcb2c24cf7be7b13ae6c89",
+  "recorded_at": "2026-09-10T12:02:15Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "ollama",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "qwen2.5:1.5b",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Extract the event from the message. Reply with a single JSON object with keys title (string), date (string, YYYY-MM-DD), time (string, 24-hour HH:MM), location (string). Compact, on a single line, no whitespace outside string values. JSON only, no markdown, no code fences, no commentary."
+      },
+      {
+        "role": "user",
+        "content": "Reminder: the Q3 planning review is on 14 October 2026 at 3pm in the Harbour Room."
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 120,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "json_valid"
+    },
+    {
+      "type": "json_schema",
+      "schema": "schemas/event.json"
+    },
+    {
+      "type": "exact"
+    },
+    {
+      "type": "similarity",
+      "threshold": 1
+    }
+  ],
+  "response": {
+    "text": "{\n  \"title\": \"Reminder: Q3 Planning Review\",\n  \"date\": \"2026-10-14\",\n  \"time\": \"15:00\",\n  \"location\": \"Harbour Room\"\n}",
+    "model": "qwen2.5:1.5b",
+    "finish_reason": "stop"
+  }
+}

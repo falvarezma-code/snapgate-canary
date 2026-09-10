@@ -1,0 +1,50 @@
+{
+  "schema_version": 2,
+  "case": "summarize.abstract.openai",
+  "fingerprint": "sha256:d0740a0df178cef9e7eafdafa5f390589fdcb18ff07c35a4724f222176f6cb8d",
+  "recorded_at": "2026-09-10T12:06:05Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "openai",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Summarize the text in one sentence of at most 25 words. Plain text only, no preamble, no bullet points."
+      },
+      {
+        "role": "user",
+        "content": "We measured how often three small language models change their answer to a fixed prompt across 30 days. With greedy decoding and a fixed seed, local models were stable, while hosted models changed 3 to 8 percent of outputs, usually after undocumented backend updates."
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 80,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "max_length",
+      "value": "300"
+    },
+    {
+      "type": "min_length",
+      "value": "20"
+    },
+    {
+      "type": "not_contains",
+      "value": "Here is"
+    },
+    {
+      "type": "similarity",
+      "threshold": 0.9
+    }
+  ],
+  "response": {
+    "text": "Local language models showed stability in responses, while hosted models changed 3 to 8 percent of outputs due to undocumented backend updates over 30 days.",
+    "model": "gpt-4o-mini-2024-07-18",
+    "finish_reason": "stop"
+  }
+}

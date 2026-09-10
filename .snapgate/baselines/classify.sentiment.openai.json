@@ -1,0 +1,45 @@
+{
+  "schema_version": 2,
+  "case": "classify.sentiment.openai",
+  "fingerprint": "sha256:176c46a19a12128ab7ba9fb3152c2879284856cae3dbedb67c07b4138d9d92b0",
+  "recorded_at": "2026-09-10T12:05:53Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "openai",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Classify the sentiment of the message. Reply with exactly one word from this list: positive, negative, neutral. Lowercase, no punctuation, nothing else."
+      },
+      {
+        "role": "user",
+        "content": "Honestly the cracked mug was annoying, but support sorted it out fast."
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 8,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "regex",
+      "pattern": "^(positive|negative|neutral)\\s*$"
+    },
+    {
+      "type": "exact"
+    },
+    {
+      "type": "similarity",
+      "threshold": 1
+    }
+  ],
+  "response": {
+    "text": "positive",
+    "model": "gpt-4o-mini-2024-07-18",
+    "finish_reason": "stop"
+  }
+}

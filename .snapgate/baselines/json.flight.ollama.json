@@ -1,0 +1,48 @@
+{
+  "schema_version": 2,
+  "case": "json.flight.ollama",
+  "fingerprint": "sha256:eef5e8c0b6aa73e8f9ba4c1c9288894ca26eb50c3cdaa225e01acf493eab348e",
+  "recorded_at": "2026-09-10T12:02:32Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "ollama",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "qwen2.5:1.5b",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Extract the flight from the message. Reply with a single JSON object with keys flight (string), origin (string, IATA code), destination (string, IATA code), departure (string, ISO 8601 date-time). Compact, on a single line, no whitespace outside string values. JSON only, no markdown, no code fences, no commentary."
+      },
+      {
+        "role": "user",
+        "content": "Flight BA285 leaves London Heathrow for San Francisco on 2026-11-02 at 11:25."
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 120,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "json_valid"
+    },
+    {
+      "type": "json_schema",
+      "schema": "schemas/flight.json"
+    },
+    {
+      "type": "exact"
+    },
+    {
+      "type": "similarity",
+      "threshold": 1
+    }
+  ],
+  "response": {
+    "text": "{\n  \"flight\": \"BA285\",\n  \"origin\": \"LHR\",\n  \"destination\": \"SFO\",\n  \"departure\": \"2026-11-02T11:25:00\"\n}",
+    "model": "qwen2.5:1.5b",
+    "finish_reason": "stop"
+  }
+}
