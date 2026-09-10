@@ -18,10 +18,11 @@ v0.1.1: a config, committed baselines, and three workflows.
 | Path | What |
 |---|---|
 | [`snapgate.yaml`](snapgate.yaml) | Two providers (`ollama`, `openai`), 24 prompts in four groups, 44 cases. Each prompt is a YAML anchor shared by both backends. |
-| [`.snapgate/baselines/`](.snapgate/baselines/) | The snapshots. One JSON file per case: the exact request, the checks, the fingerprint, and the answer. Written only by the `record` workflow, on a runner. |
-| [`fingerprints/`](fingerprints/) | What the upstream was when the baselines were recorded: model digest and quantization, Ollama version, context length, CPU. Snapgate does not record this; [`scripts/fingerprint.sh`](scripts/fingerprint.sh) does. |
+| [`.snapgate/baselines/`](.snapgate/baselines/) | The snapshots for the hosted backend. One JSON file per case: the exact request, the checks, the fingerprint, and the answer. Written only by the `record` workflow, on a runner. |
+| [`hosts/<cpu>/`](hosts/) | The Ollama snapshots, one set per CPU model, each with the upstream fingerprint it was recorded against: model digest and quantization, Ollama version, context length, CPU. [`scripts/host-baselines.sh`](scripts/host-baselines.sh) copies the matching set into place before a comparison. |
+| [`fingerprints/`](fingerprints/) | The hosted backend's identity at record time: the alias requested and the dated model the endpoint reported. Snapgate does not record this; [`scripts/fingerprint.sh`](scripts/fingerprint.sh) does the Ollama side. |
 | [`schemas/`](schemas/) | JSON Schemas for the extraction group. |
-| [`scripts/`](scripts/) | `check.sh` (one backend, retries transient errors within a budget), `drift-report.sh` (issue body and dedupe key), `explain-exit.sh` (statuses to annotations), `fingerprint.sh`, `ollama-serve.sh` (start or restart the server with the pinned settings), `determinism.sh` (experiments; the `determinism` workflow runs it on a runner). |
+| [`scripts/`](scripts/) | `check.sh` (one backend, retries transient errors within a budget), `drift-report.sh` (issue body and dedupe key), `explain-exit.sh` (statuses to annotations), `fingerprint.sh`, `ollama-serve.sh` (start or restart the server with the pinned settings), `host-baselines.sh` (per-CPU Ollama baseline sets), `determinism.sh` (experiments; the `determinism` workflow runs it on a runner). |
 | [`.github/workflows/gate.yml`](.github/workflows/gate.yml) | On every pull request: check both backends. Anything but `pass` blocks the merge. |
 | [`.github/workflows/canary.yml`](.github/workflows/canary.yml) | Nightly and on demand: check both backends, file or update drift issues. |
 | [`.github/workflows/record.yml`](.github/workflows/record.yml) | On demand: record or accept baselines on the runner, verify them, open a pull request. |
@@ -32,7 +33,7 @@ v0.1.1: a config, committed baselines, and three workflows.
 | | `ollama` | `openai` |
 |---|---|---|
 | Model | `qwen2.5:1.5b`, Q4_K_M, pulled unpinned by tag | `gpt-4o-mini`, the alias, so provider-side version changes are observed |
-| Where | Installed on the runner, keyless, `OLLAMA_CONTEXT_LENGTH=2048`, `OLLAMA_NUM_PARALLEL=1`, restarted before every case | `https://api.openai.com/v1` with the `OPENAI_API_KEY` secret |
+| Where | Installed on the runner, keyless, `OLLAMA_CONTEXT_LENGTH=2048`, `OLLAMA_NUM_PARALLEL=1`, restarted before every case; baselines per CPU model | `https://api.openai.com/v1` with the `OPENAI_API_KEY` secret |
 | Cases | all 24 | 20; at most 24 requests per check run including retries |
 | Baseline check | `exact` | `exact` for extraction and classification, `similarity ≥ 0.9` for summaries and code |
 | Params | temperature 0, seed 42, per-group `max_tokens` | same |
@@ -53,6 +54,7 @@ differently, and only one of them is news.
 | 2 | `stale` | a prompt, parameter, or check changed and the baseline was not re-recorded | fail the job, no issue |
 | 2 | `missing` | no baseline recorded | fail the job, no issue |
 | 3 | `error` | provider or config error: network, 429, missing key | retry transient errors, then fail the job, no issue |
+| | not comparable | the runner's CPU has no recorded Ollama baseline set | skip the Ollama comparison with a warning; job green |
 
 A red badge therefore means the canary itself needs attention. Drift is in
 the issues, not the badge.
@@ -182,23 +184,30 @@ acknowledgement. Baselines are never written on `main` by any workflow.
 
 ## Things to know before trusting a red badge
 
-- **A CPU change is not model drift.** GitHub runners are not all the same
-  machine. The fingerprint records the CPU model and core count; a drift
-  issue whose fingerprint delta shows only a `host.cpu` change is hardware
-  numerics, not the model. That is why it is in the fingerprint.
+- **For a local model, the CPU is part of the upstream.** GitHub hands out
+  several CPU models, and qwen2.5:1.5b on the CPU path answers differently
+  on different ones: the first nightly compared baselines recorded on an
+  AMD EPYC 7763 against answers from an Intel Xeon Platinum 8370C and 8 of
+  24 cases differed, with similarity as low as 0.35 ([issue #2](https://github.com/falvarezma-code/snapgate-canary/issues/2)).
+  So Ollama baselines are kept per CPU model under `hosts/<cpu>/`, each
+  with the fingerprint it was recorded against, and a run loads the set
+  for the CPU it landed on. A CPU with no set is reported as not comparable
+  and the job stays green; run the `record` workflow with
+  `if-host-unseen` until a run lands on it. The hosted backend is
+  CPU-independent and has one set.
+- **On the runner's CPU, the answer also depends on what Ollama's prompt
+  cache already holds.** A prompt sent while the cache holds a different
+  prompt can decode differently from the same prompt sent to an empty
+  cache. Measured with the `determinism` workflow: on one CPU the
+  empty-cache answer was identical across ten server restarts, while the
+  first record run, which sent the cases back to back, disagreed with
+  itself on 3 of 24. So every Ollama case here is sent to a freshly
+  restarted server, in record, verify, gate and nightly alike, at the cost
+  of a few seconds per case. A `snapgate check` against a server that has
+  already answered something is not comparable to the baseline.
 - **Hosted answers at temperature 0 with a seed are close to deterministic,
   not deterministic.** That is why summaries and code on `openai` use a
   similarity threshold. The similarity score is in every issue.
-- **On the runner's CPU, the answer depends on what Ollama's prompt cache
-  already holds.** A prompt sent while the cache holds a different prompt
-  can decode differently from the same prompt sent to an empty cache.
-  Measured with the `determinism` workflow: the empty-cache answer was
-  identical across ten server restarts and across Intel Xeon and AMD EPYC
-  runners, while the first record run, which sent the cases back to back,
-  disagreed with itself on 3 of 24. So every Ollama case here is sent to a
-  freshly restarted server, in record, verify, gate and nightly alike, at
-  the cost of a few seconds per case. A `snapgate check` against a server
-  that has already answered something is not comparable to the baseline.
 - **The record workflow verifies what it records.** `snapgate record` does
   not run the checks on the answer it stores, so `record.yml` re-runs the
   whole backend the way the nightly does. A check that rejects the model's
@@ -229,7 +238,10 @@ Commit conventions and the disclosure of how this repository is built are in
 2. Settings → Actions → General → allow GitHub Actions to create pull
    requests. `record.yml` needs it.
 3. Run the `record` workflow once with `backend: both`, `mode: record`, and
-   merge its PR. That is the first set of baselines.
+   merge its PR. That is the first set of baselines. Then run it a few more
+   times with `backend: ollama`, `if-host-unseen: true`, merging each PR,
+   until the nightly stops reporting "not comparable": each run records a
+   set for whichever CPU model it lands on.
 4. Branch protection on `main`: require the checks `snapgate check (ollama)`
    and `snapgate check (openai)`.
 

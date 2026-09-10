@@ -4,3 +4,6 @@
 .determinism/
 # Per-run JSON reports from scripts/check.sh
 .snapgate/reports/
+# Ollama baselines are per CPU model and live under hosts/<cpu>/baselines/;
+# scripts/host-baselines.sh copies the matching set here at run time.
+.snapgate/baselines/*.ollama.json
