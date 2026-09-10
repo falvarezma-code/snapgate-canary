@@ -1,0 +1,49 @@
+{
+  "schema_version": 2,
+  "case": "codegen.palindrome.ollama",
+  "fingerprint": "sha256:86c68d4211d10a971d91f20cd8e3b517407bad35f4f3e80c16e9a1a884283013",
+  "recorded_at": "2026-09-10T13:46:30Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "ollama",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "qwen2.5:1.5b",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Write the requested Python function. Reply with code only, no explanation, no markdown, no code fences."
+      },
+      {
+        "role": "user",
+        "content": "Write is_palindrome(s) that returns True if s reads the same forwards and backwards, ignoring case and non-alphanumeric characters."
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 200,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "regex",
+      "pattern": "(?m)^def is_palindrome\\("
+    },
+    {
+      "type": "max_length",
+      "value": "800"
+    },
+    {
+      "type": "exact"
+    },
+    {
+      "type": "similarity",
+      "threshold": 1
+    }
+  ],
+  "response": {
+    "text": "```python\ndef is_palindrome(s):\n    import re\n    s = re.sub(r'[^A-Za-z0-9]', '', s).lower()\n    return s == s[::-1]\n```",
+    "model": "qwen2.5:1.5b",
+    "finish_reason": "stop"
+  }
+}
