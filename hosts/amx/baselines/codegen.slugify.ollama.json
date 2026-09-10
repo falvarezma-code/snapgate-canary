@@ -1,0 +1,49 @@
+{
+  "schema_version": 2,
+  "case": "codegen.slugify.ollama",
+  "fingerprint": "sha256:d5475305620121b6a7fe622f6895cd17d2632b0ad80ea781a6093493742eab96",
+  "recorded_at": "2026-09-10T15:20:07Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "ollama",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "qwen2.5:1.5b",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Write the requested Python function. Reply with code only, no explanation, no markdown, no code fences."
+      },
+      {
+        "role": "user",
+        "content": "Write slugify(title) that lowercases the string, replaces runs of non-alphanumeric characters with a single hyphen, and strips leading and trailing hyphens."
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 200,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "regex",
+      "pattern": "(?m)^def slugify\\("
+    },
+    {
+      "type": "max_length",
+      "value": "800"
+    },
+    {
+      "type": "exact"
+    },
+    {
+      "type": "similarity",
+      "threshold": 1
+    }
+  ],
+  "response": {
+    "text": "```python\ndef slugify(title):\n    return '-'.join(title.lower().split()).strip('-')\n```",
+    "model": "qwen2.5:1.5b",
+    "finish_reason": "stop"
+  }
+}
