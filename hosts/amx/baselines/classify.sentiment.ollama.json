@@ -1,0 +1,45 @@
+{
+  "schema_version": 2,
+  "case": "classify.sentiment.ollama",
+  "fingerprint": "sha256:f683dc7e9fc8301c5363324ebb9c5753fd0825e73a81fb952268c0b4389249a9",
+  "recorded_at": "2026-09-10T15:19:12Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "ollama",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "qwen2.5:1.5b",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Classify the sentiment of the message. Reply with exactly one word from this list: positive, negative, neutral. Lowercase, no punctuation, nothing else."
+      },
+      {
+        "role": "user",
+        "content": "Honestly the cracked mug was annoying, but support sorted it out fast."
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 8,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "regex",
+      "pattern": "^(positive|negative|neutral)\\s*$"
+    },
+    {
+      "type": "exact"
+    },
+    {
+      "type": "similarity",
+      "threshold": 1
+    }
+  ],
+  "response": {
+    "text": "positive",
+    "model": "qwen2.5:1.5b",
+    "finish_reason": "stop"
+  }
+}

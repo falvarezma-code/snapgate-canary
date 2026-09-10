@@ -1,0 +1,57 @@
+{
+  "schema_version": 2,
+  "case": "summarize.release.ollama",
+  "fingerprint": "sha256:48ca96530e3a52e89717fce8bcbd6d063805dc34a7fd66711eaabff95240b51b",
+  "recorded_at": "2026-09-10T15:19:31Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "ollama",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "qwen2.5:1.5b",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Summarize the text in one sentence of at most 25 words. Plain text only, no preamble, no bullet points."
+      },
+      {
+        "role": "user",
+        "content": "Version 2.4 of the CLI adds a --dry-run flag to every write command, removes the deprecated sync subcommand, and fixes a race that corrupted the cache when two instances started at once. Upgrading requires no config changes."
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 80,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "contains",
+      "value": "2.4"
+    },
+    {
+      "type": "max_length",
+      "value": "300"
+    },
+    {
+      "type": "min_length",
+      "value": "20"
+    },
+    {
+      "type": "not_contains",
+      "value": "Here is"
+    },
+    {
+      "type": "exact"
+    },
+    {
+      "type": "similarity",
+      "threshold": 1
+    }
+  ],
+  "response": {
+    "text": "Version 2.4 of the CLI adds a --dry-run flag, removes deprecated sync subcommand, and fixes race that corrupted cache.",
+    "model": "qwen2.5:1.5b",
+    "finish_reason": "stop"
+  }
+}
