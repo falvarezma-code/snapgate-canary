@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Start (or restart) an Ollama server with the settings this canary pins,
-# and wait until it answers. Used by the setup-ollama action and by the
-# record workflow, which restarts the server between its record and verify
-# passes so both see the same empty prompt cache.
+# and wait until it answers. Used by the setup-ollama action once, and then
+# by every Ollama job before every case (BEFORE_CASE in scripts/check.sh,
+# the record loop in record.yml), so each request sees an empty prompt
+# cache.
 #
 #   scripts/ollama-serve.sh
 #
@@ -14,12 +15,12 @@
 #   OLLAMA_LOG              default $RUNNER_TEMP/ollama.log or /tmp/ollama.log
 #
 # Why the cache matters: on the runner's CPU path the model's answer to a
-# prompt depends on whether that prompt (or a prefix of it) is already in
-# the server's KV cache. The first request processes the prompt in one
-# batch; a repeat reuses cached state and takes a different numeric path,
-# and greedy decoding can then diverge. Answers are identical whenever the
-# server history is identical, so every comparison in this repo starts from
-# a fresh server and sends the cases once, in config order.
+# prompt depends on what the server's KV cache already holds. Measured with
+# the determinism workflow: a prompt sent to a server whose cache holds a
+# different prompt can decode differently from the same prompt sent to an
+# empty cache, while the empty-cache answer was identical across ten
+# restarts and across Intel and AMD runners. A restart costs a few seconds
+# per case and buys an answer that does not depend on ordering.
 set -euo pipefail
 
 export OLLAMA_CONTEXT_LENGTH="${OLLAMA_CONTEXT_LENGTH:-2048}"

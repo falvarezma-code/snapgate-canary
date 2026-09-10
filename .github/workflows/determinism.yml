@@ -20,9 +20,9 @@ on:
         type: string
         default: "5m"
       fresh-server:
-        description: Restart Ollama before every request, so each one sees an empty prompt cache (how record and the nightly send their first request)
+        description: Restart Ollama before every request, so each one sees an empty prompt cache (how record and the nightly send every request)
         type: boolean
-        default: false
+        default: true
 
 permissions:
   contents: read

@@ -7,8 +7,12 @@
 # Environment:
 #   SNAPGATE_CONFIG      config path (default snapgate.yaml)
 #   CASES                space-separated case names to run instead of every
-#                        case of the backend (used by record.yml to verify
-#                        only what it accepted)
+#                        case of the backend
+#   BEFORE_CASE          a command to run before every case; when set, cases
+#                        are sent one at a time and the reports merged. The
+#                        Ollama jobs set it to scripts/ollama-serve.sh so each
+#                        request sees an empty prompt cache, the only state in
+#                        which the runner's answers were measured reproducible
 #   REPORT_DIR           where the merged JSON report goes (default .snapgate/reports)
 #   RETRY_BUDGET         max provider calls spent on retries (default 4)
 #   RETRY_DELAYS         backoff in seconds between rounds (default "30 60 120")
@@ -46,26 +50,50 @@ else
 fi
 [ -n "$cases" ] || { echo "no cases use provider $backend" >&2; exit 3; }
 
-# shellcheck disable=SC2086
-run_check() { snapgate --config "$config" check --json $1 > "$2" || true; }
+# Recompute the run status and exit code from the cases with Snapgate's
+# severity order (ADR 0004): error > stale > missing > drift > pass.
+# shellcheck disable=SC2016  # $sev and $exit are jq variables
+recompute='
+  ({pass: 0, drift: 1, missing: 2, stale: 3, error: 4}) as $sev
+  | ({pass: 0, drift: 1, missing: 2, stale: 2, error: 3}) as $exit
+  | .status = ([.cases[].status] | max_by($sev[.]) // "pass")
+  | .exit_code = $exit[.status]'
 
-# merge <report> <partial>: replace matching cases, recompute run status
-# with Snapgate's severity order (ADR 0004).
+# run_check <names> <out>: one `snapgate check --json` for all names, or,
+# with BEFORE_CASE set, the hook and one check per case, appended into out.
+run_check() {
+  if [ -z "${BEFORE_CASE:-}" ]; then
+    # shellcheck disable=SC2086
+    snapgate --config "$config" check --json $1 > "$2" || true
+    return
+  fi
+  rm -f "$2"
+  for c in $1; do
+    $BEFORE_CASE >/dev/null
+    snapgate --config "$config" check --json "$c" > "$2.one" || true
+    if [ ! -s "$2" ] || ! jq -e .cases "$2.one" >/dev/null 2>&1; then
+      mv "$2.one" "$2"          # first case, or a config error to surface
+      jq -e .cases "$2" >/dev/null 2>&1 || return 0
+      continue
+    fi
+    jq -s ".[0] as \$a | .[1] as \$b | \$a | .cases += \$b.cases | $recompute" "$2" "$2.one" > "$2.tmp" \
+      && mv "$2.tmp" "$2"
+    rm -f "$2.one"
+  done
+}
+
+# merge <report> <partial>: replace matching cases, recompute run status.
 merge() {
-  jq -s '
-    ({pass: 0, drift: 1, missing: 2, stale: 3, error: 4}) as $sev
-    | ({pass: 0, drift: 1, missing: 2, stale: 2, error: 3}) as $exit
-    | (.[1].cases | map({key: .name, value: .}) | from_entries) as $new
-    | .[0]
-    | .cases |= map($new[.name] // .)
-    | .status = ([.cases[].status] | max_by($sev[.]) // "pass")
-    | .exit_code = $exit[.status]
-  ' "$1" "$2" > "$1.tmp" && mv "$1.tmp" "$1"
+  jq -s "
+    .[0] as \$a | .[1] as \$b
+    | (\$b.cases | map({key: .name, value: .}) | from_entries) as \$new
+    | \$a | .cases |= map(\$new[.name] // .) | $recompute
+  " "$1" "$2" > "$1.tmp" && mv "$1.tmp" "$1"
 }
 
 transient='HTTP (429|5[0-9][0-9])|timed out|connection refused|connection reset|EOF'
 
-echo "check: $backend ($(echo "$cases" | wc -l | tr -d ' ') cases)"
+echo "check: $backend ($(echo "$cases" | wc -l | tr -d ' ') cases${BEFORE_CASE:+, one at a time after: $BEFORE_CASE})"
 run_check "$(echo "$cases" | tr '\n' ' ')" "$report"
 # A config error exits 3 before any JSON is written; the message is on stderr.
 jq -e .cases "$report" >/dev/null 2>&1 || { echo "snapgate wrote no report; see the error above" >&2; exit 3; }

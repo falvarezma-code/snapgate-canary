@@ -20,6 +20,9 @@ jobs:
     name: snapgate check (ollama)
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      # Ollama cases run one at a time after a server restart; see scripts/ollama-serve.sh.
+      BEFORE_CASE: scripts/ollama-serve.sh
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-snapgate

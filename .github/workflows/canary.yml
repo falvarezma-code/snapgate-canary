@@ -29,6 +29,8 @@ jobs:
         backend: [ollama, openai]
     env:
       BACKEND: ${{ matrix.backend }}
+      # Ollama cases run one at a time after a server restart; see scripts/ollama-serve.sh.
+      BEFORE_CASE: ${{ matrix.backend == 'ollama' && 'scripts/ollama-serve.sh' || '' }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       GH_TOKEN: ${{ github.token }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
