@@ -179,9 +179,14 @@ Snapgate needed no change.
   families for the same 8 of 24 cases. Every host exposing `avx avx2 fma
   f16c` (AMD EPYC 7763 ×4, 9V74 ×2) produced one family byte for byte;
   every host exposing AVX-512 (`avx512f/bw/vl/_vnni/_bf16`, AMD EPYC 9V45
-  ×2) produced the other. Two record runs on VMs both reporting "AMD EPYC
-  9V74" had landed on opposite sides, which is what ruled out the CPU model
-  as the key. Consequences in this repo: every Ollama case is sent to a
+  ×2) produced the other, and the `avx512` set later recorded on an Intel
+  Xeon Platinum 8573C matched it hash for hash. Two record runs on VMs
+  both reporting "AMD EPYC 9V74" had landed on opposite sides, which is
+  what ruled out the CPU model as the key. A host exposing AMX (Intel Xeon
+  6973P-C, `amx_tile amx_int8 amx_bf16`) then produced a third family:
+  it differs from the AVX-512 set on four of the eight sensitive cases and
+  on `codegen.parse_kv`, which AVX2 and AVX-512 had agreed on, so AMX is
+  its own class rather than a sub-case of AVX-512. Consequences in this repo: every Ollama case is sent to a
   freshly restarted server (`BEFORE_CASE` in `scripts/check.sh`), and
   Ollama baselines are kept per class (`avx2`, `avx512`, `amx`) under
   `hosts/<class>/`, with `scripts/host-baselines.sh` deriving the class

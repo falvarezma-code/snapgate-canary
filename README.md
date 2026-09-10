@@ -185,14 +185,16 @@ acknowledgement. Baselines are never written on `main` by any workflow.
 ## Things to know before trusting a red badge
 
 - **For a local model, the CPU's instruction set is part of the upstream.**
-  qwen2.5:1.5b on the CPU path has exactly two answers for 8 of the 24
-  prompts, and which one a machine gives is decided by the SIMD
+  qwen2.5:1.5b on the CPU path gives one of a few fixed answers to 9 of
+  the 24 prompts, and which one a machine gives is decided by the SIMD
   instructions the VM exposes, which select the kernels Ollama runs. Eight
   determinism runs on GitHub's pool: every host exposing only AVX2 (AMD
   EPYC 7763 and 9V74) gave one identical set, every host exposing AVX-512
-  (AMD EPYC 9V45) gave the other, and two VMs reporting the same CPU model
-  can sit on different sides. The first nightly hit this across the two
-  classes: 8 of 24 differed, similarity as low as 0.35
+  (AMD EPYC 9V45, Intel Xeon Platinum 8573C) gave a second, and a host
+  exposing AMX (Intel Xeon 6973P-C) gave a third that differs from the
+  AVX-512 set on five cases. Two VMs reporting the same CPU model can sit
+  on different sides. The first nightly hit this across two classes: 8 of
+  24 differed, similarity as low as 0.35
   ([issue #2](https://github.com/falvarezma-code/snapgate-canary/issues/2)).
   So Ollama baselines are kept per SIMD class under `hosts/<class>/`, each
   with the fingerprint it was recorded against, and a run loads the set
