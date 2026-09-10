@@ -43,7 +43,10 @@ jobs:
           keep-alive: ${{ inputs.keep-alive }}
 
       - name: Fingerprint
-        run: scripts/fingerprint.sh
+        run: |
+          scripts/fingerprint.sh
+          echo "== ollama log, CPU and compute lines"
+          grep -iE 'cpu|compute|avx|amx' "$RUNNER_TEMP/ollama.log" | head -20 || true
 
       - name: Run each case N times
         run: |

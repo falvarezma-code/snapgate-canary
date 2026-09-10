@@ -44,6 +44,24 @@ case "$os" in
 esac
 cores="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 0)"
 
+# Which SIMD kernels the model runs on is decided by the instruction-set
+# flags the (virtual) machine exposes, not by the CPU model name: two VMs
+# reporting the same model can differ. Record the flags that select
+# llama.cpp CPU kernels, and what Ollama itself reported about the CPU.
+flags=""
+if [ "$os" = Linux ]; then
+  all="$(sed -n 's/^flags[[:space:]]*: //p' /proc/cpuinfo | head -1)"
+  for f in avx avx2 fma f16c avx512f avx512bw avx512vl avx512_vnni avx512_bf16 avx_vnni amx_tile amx_int8 amx_bf16; do
+    case " $all " in *" $f "*) flags="$flags $f" ;; esac
+  done
+  flags="${flags# }"
+fi
+ollama_cpu=""
+log="${OLLAMA_LOG:-${RUNNER_TEMP:-/tmp}/ollama.log}"
+if [ -f "$log" ]; then
+  ollama_cpu="$(grep -iE 'inference compute|cpu.*(variant|features|threads)' "$log" | head -3 | sed -E 's/^[^ ]+ [^ ]+ //' | tr '\n' ' ' | sed 's/ *$//')"
+fi
+
 jq -Sn \
   --arg model "$model" \
   --arg digest "$digest" \
@@ -54,6 +72,7 @@ jq -Sn \
   --arg keep "${OLLAMA_KEEP_ALIVE:-default}" \
   --arg backend "$backend" \
   --arg os "$os" --arg arch "$arch" --arg cpu "$cpu" --argjson cores "$cores" \
+  --arg flags "$flags" --arg ollama_cpu "$ollama_cpu" \
   '{
     model: {
       tag: $model,
@@ -77,6 +96,8 @@ jq -Sn \
       os: $os,
       arch: $arch,
       cpu: $cpu,
-      cores: $cores
+      cores: $cores,
+      flags: $flags,
+      ollama_cpu: $ollama_cpu
     }
   }'
