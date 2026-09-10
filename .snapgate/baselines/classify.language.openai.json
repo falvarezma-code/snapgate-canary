@@ -1,0 +1,45 @@
+{
+  "schema_version": 2,
+  "case": "classify.language.openai",
+  "fingerprint": "sha256:0a1c258d8753caf4e3eccedb7ec1ccaa859159da0eb76c8e3235cdc2f5d061af",
+  "recorded_at": "2026-09-10T12:05:55Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "openai",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Identify the language of the message. Reply with exactly one code from this list: en, es, fr, de, pt, it. Lowercase, no punctuation, nothing else."
+      },
+      {
+        "role": "user",
+        "content": "Obrigado pela resposta rápida, vou verificar o pedido ainda hoje."
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 8,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "regex",
+      "pattern": "^(en|es|fr|de|pt|it)\\s*$"
+    },
+    {
+      "type": "exact"
+    },
+    {
+      "type": "similarity",
+      "threshold": 1
+    }
+  ],
+  "response": {
+    "text": "pt",
+    "model": "gpt-4o-mini-2024-07-18",
+    "finish_reason": "stop"
+  }
+}

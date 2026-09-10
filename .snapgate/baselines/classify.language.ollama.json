@@ -1,0 +1,45 @@
+{
+  "schema_version": 2,
+  "case": "classify.language.ollama",
+  "fingerprint": "sha256:30df01855400669d10d60a0efa6d8824c32214360ae4de2fa886ac1b0cd6619f",
+  "recorded_at": "2026-09-10T12:02:43Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "ollama",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "qwen2.5:1.5b",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Identify the language of the message. Reply with exactly one code from this list: en, es, fr, de, pt, it. Lowercase, no punctuation, nothing else."
+      },
+      {
+        "role": "user",
+        "content": "Obrigado pela resposta rápida, vou verificar o pedido ainda hoje."
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 8,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "regex",
+      "pattern": "^(en|es|fr|de|pt|it)\\s*$"
+    },
+    {
+      "type": "exact"
+    },
+    {
+      "type": "similarity",
+      "threshold": 1
+    }
+  ],
+  "response": {
+    "text": "pt",
+    "model": "qwen2.5:1.5b",
+    "finish_reason": "stop"
+  }
+}

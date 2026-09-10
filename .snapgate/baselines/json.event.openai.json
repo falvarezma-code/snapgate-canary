@@ -1,0 +1,48 @@
+{
+  "schema_version": 2,
+  "case": "json.event.openai",
+  "fingerprint": "sha256:6dab4221c10de4e23d0250f0859b72ed53f1abc2bc1ac2ea8e501dfdb57e2af1",
+  "recorded_at": "2026-09-10T12:05:47Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "openai",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Extract the event from the message. Reply with a single JSON object with keys title (string), date (string, YYYY-MM-DD), time (string, 24-hour HH:MM), location (string). Compact, on a single line, no whitespace outside string values. JSON only, no markdown, no code fences, no commentary."
+      },
+      {
+        "role": "user",
+        "content": "Reminder: the Q3 planning review is on 14 October 2026 at 3pm in the Harbour Room."
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 120,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "json_valid"
+    },
+    {
+      "type": "json_schema",
+      "schema": "schemas/event.json"
+    },
+    {
+      "type": "exact"
+    },
+    {
+      "type": "similarity",
+      "threshold": 1
+    }
+  ],
+  "response": {
+    "text": "{\"title\":\"Q3 planning review\",\"date\":\"2026-10-14\",\"time\":\"15:00\",\"location\":\"Harbour Room\"}",
+    "model": "gpt-4o-mini-2024-07-18",
+    "finish_reason": "stop"
+  }
+}

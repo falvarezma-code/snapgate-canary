@@ -1,0 +1,48 @@
+{
+  "schema_version": 2,
+  "case": "json.address.openai",
+  "fingerprint": "sha256:f4bdb41fd9599fde476cc04946c3e9fc80f57afbc2c81adb604c34dfa1c099f1",
+  "recorded_at": "2026-09-10T12:05:49Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "openai",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Extract the postal address from the message. Reply with a single JSON object with keys street (string), city (string), postal_code (string), country (string, ISO 3166-1 alpha-2 code). Compact, on a single line, no whitespace outside string values. JSON only, no markdown, no code fences, no commentary."
+      },
+      {
+        "role": "user",
+        "content": "Ship it to 22 Rosemary Lane, Bristol BS1 4DJ, United Kingdom."
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 120,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "json_valid"
+    },
+    {
+      "type": "json_schema",
+      "schema": "schemas/address.json"
+    },
+    {
+      "type": "exact"
+    },
+    {
+      "type": "similarity",
+      "threshold": 1
+    }
+  ],
+  "response": {
+    "text": "{\"street\":\"22 Rosemary Lane\",\"city\":\"Bristol\",\"postal_code\":\"BS1 4DJ\",\"country\":\"GB\"}",
+    "model": "gpt-4o-mini-2024-07-18",
+    "finish_reason": "stop"
+  }
+}

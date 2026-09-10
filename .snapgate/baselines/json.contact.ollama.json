@@ -1,0 +1,48 @@
+{
+  "schema_version": 2,
+  "case": "json.contact.ollama",
+  "fingerprint": "sha256:f98f8cfdbab2e066e5bfada6a59053ac94c90c5201fa89d6f8bfa24e10b47643",
+  "recorded_at": "2026-09-10T12:02:09Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "ollama",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "qwen2.5:1.5b",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Extract contact details from the message. Reply with a single JSON object with keys name (string), email (string), phone (string, or null if absent). Compact, on a single line, no whitespace outside string values. JSON only, no markdown, no code fences, no commentary."
+      },
+      {
+        "role": "user",
+        "content": "Please reach Dana Whitfield at dana.w@example.org; she did not leave a number."
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 120,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "json_valid"
+    },
+    {
+      "type": "json_schema",
+      "schema": "schemas/contact.json"
+    },
+    {
+      "type": "exact"
+    },
+    {
+      "type": "similarity",
+      "threshold": 1
+    }
+  ],
+  "response": {
+    "text": "{\n  \"name\": \"Dana Whitfield\",\n  \"email\": \"dana.w@example.org\",\n  \"phone\": null\n}",
+    "model": "qwen2.5:1.5b",
+    "finish_reason": "stop"
+  }
+}

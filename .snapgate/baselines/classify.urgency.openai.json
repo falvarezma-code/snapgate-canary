@@ -1,0 +1,45 @@
+{
+  "schema_version": 2,
+  "case": "classify.urgency.openai",
+  "fingerprint": "sha256:404c879ea7dffe3672bdc1b1f13c1050478c652646d27ca83335a5e74c972f85",
+  "recorded_at": "2026-09-10T12:05:56Z",
+  "snapgate_version": "v0.1.1",
+  "provider": {
+    "name": "openai",
+    "type": "openai-compatible"
+  },
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Classify how urgent the support ticket is. Reply with exactly one word from this list: low, medium, high. Lowercase, no punctuation, nothing else."
+      },
+      {
+        "role": "user",
+        "content": "Checkout has been returning a 500 error for every customer for the last twenty minutes."
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 8,
+    "seed": 42
+  },
+  "checks": [
+    {
+      "type": "regex",
+      "pattern": "^(low|medium|high)\\s*$"
+    },
+    {
+      "type": "exact"
+    },
+    {
+      "type": "similarity",
+      "threshold": 1
+    }
+  ],
+  "response": {
+    "text": "high",
+    "model": "gpt-4o-mini-2024-07-18",
+    "finish_reason": "stop"
+  }
+}
