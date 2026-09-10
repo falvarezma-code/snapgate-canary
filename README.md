@@ -32,7 +32,7 @@ v0.1.1: a config, committed baselines, and three workflows.
 | | `ollama` | `openai` |
 |---|---|---|
 | Model | `qwen2.5:1.5b`, Q4_K_M, pulled unpinned by tag | `gpt-4o-mini`, the alias, so provider-side version changes are observed |
-| Where | Installed on the runner, keyless, `OLLAMA_CONTEXT_LENGTH=2048`, `OLLAMA_NUM_PARALLEL=1` | `https://api.openai.com/v1` with the `OPENAI_API_KEY` secret |
+| Where | Installed on the runner, keyless, `OLLAMA_CONTEXT_LENGTH=2048`, `OLLAMA_NUM_PARALLEL=1`, restarted before every case | `https://api.openai.com/v1` with the `OPENAI_API_KEY` secret |
 | Cases | all 24 | 20; at most 24 requests per check run including retries |
 | Baseline check | `exact` | `exact` for extraction and classification, `similarity ≥ 0.9` for summaries and code |
 | Params | temperature 0, seed 42, per-group `max_tokens` | same |
@@ -189,23 +189,22 @@ acknowledgement. Baselines are never written on `main` by any workflow.
 - **Hosted answers at temperature 0 with a seed are close to deterministic,
   not deterministic.** That is why summaries and code on `openai` use a
   similarity threshold. The similarity score is in every issue.
-- **On the runner's CPU, the answer depends on the server's history.** The
-  first time Ollama sees a prompt it processes it in one batch; a repeat, or
-  a prompt sharing a prefix with one already cached, reuses cached state and
-  takes a different numeric path, and greedy decoding can diverge. Measured
-  on the runner with the `determinism` workflow: run 1 of a prompt gives one
-  answer, runs 2 to 10 give another, all identical, and two separate jobs
-  produced the same two answers. So the model is reproducible as long as
-  the history is: every comparison here starts from a fresh server and sends
-  the cases once, in config order. A single-case `snapgate check` on a warm
-  server is not comparable to the baseline, and a retried Ollama case can
-  report drift for that reason; re-run the job.
+- **On the runner's CPU, the answer depends on what Ollama's prompt cache
+  already holds.** A prompt sent while the cache holds a different prompt
+  can decode differently from the same prompt sent to an empty cache.
+  Measured with the `determinism` workflow: the empty-cache answer was
+  identical across ten server restarts and across Intel Xeon and AMD EPYC
+  runners, while the first record run, which sent the cases back to back,
+  disagreed with itself on 3 of 24. So every Ollama case here is sent to a
+  freshly restarted server, in record, verify, gate and nightly alike, at
+  the cost of a few seconds per case. A `snapgate check` against a server
+  that has already answered something is not comparable to the baseline.
 - **The record workflow verifies what it records.** `snapgate record` does
-  not run the checks on the answer it stores, so `record.yml` restarts
-  Ollama, re-runs the whole backend the way the nightly does, and refuses
-  to open a PR unless every case passes. A case that fails there is either
-  a check that rejects the model's honest answer or an answer that is not
-  reproducible on the runner. It spends two hosted calls per case.
+  not run the checks on the answer it stores, so `record.yml` re-runs the
+  whole backend the way the nightly does and refuses to open a PR unless
+  every case passes. A case that fails there is either a check that rejects
+  the model's honest answer or an answer that is not reproducible on the
+  runner. It spends two hosted calls per case.
 - **Pull requests from the `record` workflow do not trigger `gate`.** GitHub
   does not run workflows on events caused by the built-in token. Close and
   reopen the PR to run the gate, or merge on the strength of the record log.
