@@ -1,8 +1,10 @@
 # The consumer integration: every pull request re-runs the prompts against
-# both upstreams and compares with the committed baselines. Any non-zero
-# Snapgate exit fails the job, and branch protection turns that into a
-# blocked merge. Exit 2 (a prompt changed, baseline not re-recorded) is the
-# common case for a PR; the fix is `snapgate accept` (see README).
+# both upstreams and compares with the committed baselines. A failing job
+# is a blocked merge through branch protection. Exit 2 (a prompt changed,
+# baseline not re-recorded) is the common case for a PR; the fix is
+# `snapgate accept` (see README). Any non-zero exit fails the Ollama job,
+# whose runtime settings live in this repo. The hosted job lets one kind of
+# drift through as a warning; see its Check step.
 name: gate
 
 on:
@@ -56,9 +58,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-snapgate
+      # Hosted drift (exit 1) cannot come from a pull request whose requests
+      # all match their baselines, which a drift status guarantees (G10
+      # aside). It is the nightly's subject, and gpt-4o-mini rewords free
+      # text from call to call (GAPS.md G18), so a wording change alone is a
+      # warning here. It still blocks when a check that judges the answer on
+      # its own fails (contains, length, JSON, ...), or when the baseline
+      # fails its own checks (empty diff): those are regressions, not rewording.
+      # Snapgate's exit code cannot tell the two apart (G19), so the report is read.
       - name: Check
         if: env.OPENAI_API_KEY != ''
-        run: scripts/check.sh openai
+        run: |
+          set +e
+          scripts/check.sh openai
+          code=$?
+          set -e
+          [ "$code" = 1 ] || exit "$code"
+          report=.snapgate/reports/openai.json
+          blocking=$(jq -r '[.cases[] | select(.status == "drift")
+            | select(.diff == "" or ([.samples[]?.checks[]? | select(.passed | not) | .type]
+                | any(. != "exact" and . != "normalized" and . != "similarity")))
+            | .name] | join(" ")' "$report")
+          if [ -n "$blocking" ]; then
+            echo "::error::hosted drift that fails a check on the answer itself, not only the baseline comparison: $blocking"
+            exit 1
+          fi
+          for c in $(jq -r '.cases[] | select(.status == "drift") | .name' "$report"); do
+            echo "::warning title=hosted rewording ($c)::the answer changed but every check on it passed; the diff is in the log above. Not caused by this pull request; the nightly tracks it."
+          done
       - name: Explain
         if: failure()
         run: scripts/explain-exit.sh openai

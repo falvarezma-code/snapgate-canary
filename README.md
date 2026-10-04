@@ -23,7 +23,7 @@ v0.1.1: a config, committed baselines, and three workflows.
 | [`fingerprints/`](fingerprints/) | The hosted backend's identity at record time: the alias requested and the dated model the endpoint reported. Snapgate does not record this; [`scripts/fingerprint.sh`](scripts/fingerprint.sh) does the Ollama side. |
 | [`schemas/`](schemas/) | JSON Schemas for the extraction group. |
 | [`scripts/`](scripts/) | `check.sh` (one backend, retries transient errors within a budget), `drift-report.sh` (issue body and dedupe key), `explain-exit.sh` (statuses to annotations), `fingerprint.sh`, `ollama-serve.sh` (start or restart the server with the pinned settings), `host-baselines.sh` (Ollama baseline sets per SIMD class), `determinism.sh` (experiments; the `determinism` workflow runs it on a runner). |
-| [`.github/workflows/gate.yml`](.github/workflows/gate.yml) | On every pull request: check both backends. Anything but `pass` blocks the merge. |
+| [`.github/workflows/gate.yml`](.github/workflows/gate.yml) | On every pull request: check both backends. Anything but `pass` blocks the merge, except a hosted answer that is only reworded (every check on the answer itself still passes), which is a warning. |
 | [`.github/workflows/canary.yml`](.github/workflows/canary.yml) | Nightly and on demand: check both backends, file or update drift issues. |
 | [`.github/workflows/record.yml`](.github/workflows/record.yml) | On demand: record or accept baselines on the runner, verify them, open a pull request. |
 | [`GAPS.md`](GAPS.md) | What this canary needed that Snapgate does not have, and the smallest change that would close each gap. |
