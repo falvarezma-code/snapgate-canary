@@ -169,9 +169,14 @@ Changed:
 ```
 ````
 
-The issue is keyed on a hash of the diffs, not the date. The next night, if
-the diffs are the same, the job comments "still drifted, day 2" on the open
-issue; if they differ, it opens a new issue that says which one it supersedes.
+The issue is keyed on a hash of the diffs, not the date. On a later night, if
+the diffs are the same, the job comments "drifted again: night 2 with this
+diff, day 2" on the open issue; if they differ, it opens a new issue that says
+which one it supersedes. A diff that skips nights (fewer nights than days)
+gets the `intermittent` label: the hosted model answering differently from
+run to run, not a lasting change.
+Ollama issues are tracked per CPU SIMD class (the title says which), since
+each class is compared against its own baseline set.
 For the hosted backend the fingerprint section is a table of the model name
 the endpoint reported at record time and in this run, which is how an alias
 quietly moving to a new dated snapshot shows up.

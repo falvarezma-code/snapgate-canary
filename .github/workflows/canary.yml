@@ -91,22 +91,41 @@ jobs:
           OUT: ${{ runner.temp }}/drift
         run: |
           key=$(cat "$OUT/key")
+          scope=$(cat "$OUT/scope")
           model=$(cat "$OUT/model")
           today=$(date -u +%F)
+          # Ollama drift is tracked per SIMD class: each class has its own
+          # baselines, so two classes drifting are two issues, not one issue
+          # superseding the other every night the runner class changes.
+          where=""
+          [ "$scope" != "$BACKEND" ] && where=" on ${scope#*/}"
           gh label create drift --description "Upstream model output changed with no change in this repo" --color B60205 --force
           open=$(gh issue list --label drift --state open --limit 100 --json number,body,createdAt)
-          same=$(jq -r --arg m "drift-key: $BACKEND:$key" '[.[] | select(.body | contains($m))] | first | .number // empty' <<< "$open")
+          same=$(jq -r --arg m "drift-key: $scope:$key" '[.[] | select(.body | contains($m))] | first | .number // empty' <<< "$open")
           if [ -n "$same" ]; then
             created=$(jq -r --argjson n "$same" '.[] | select(.number == $n) | .createdAt' <<< "$open")
-            day=$(( ( $(date -u +%s) - $(date -u -d "$created" +%s) ) / 86400 + 1 ))
-            gh issue comment "$same" --body "Still drifted, day $day. Same diff as when this issue was opened (key \`$BACKEND:$key\`). Run: $RUN_URL"
-            echo "::warning title=upstream drift ($BACKEND)::still drifted, day $day, see #$same"
+            # Calendar days, not elapsed hours: run start times vary by hours.
+            day=$(( ( $(date -u -d "$today" +%s) - $(date -u -d "${created%%T*}" +%s) ) / 86400 + 1 ))
+            # Nights this diff was seen: the opening night, each earlier
+            # comment, and tonight. Fewer nights than days means it came and
+            # went, which for a hosted model is run-to-run variance rather
+            # than a lasting change; the label says so on the issue list.
+            nights=$(gh issue view "$same" --json comments \
+              --jq '[.comments[].body | select(startswith("Still drifted") or startswith("Drifted again"))] | length + 2')
+            msg="Drifted again: night $nights with this diff, day $day since this issue was opened (key \`$scope:$key\`). Run: $RUN_URL"
+            if [ "$nights" -lt "$day" ]; then
+              gh label create intermittent --description "Drift that comes and goes between nights" --color FBCA04 --force
+              gh issue edit "$same" --add-label intermittent
+              msg="$msg"$'\n\n'"This diff did not appear on $(( day - nights )) of those $day days, so it is intermittent rather than a lasting change."
+            fi
+            gh issue comment "$same" --body "$msg"
+            echo "::warning title=upstream drift ($BACKEND)::drifted again, night $nights of $day, see #$same"
           else
-            prev=$(jq -r --arg p "drift-key: $BACKEND:" '[.[] | select(.body | contains($p))] | first | .number // empty' <<< "$open")
+            prev=$(jq -r --arg p "drift-key: $scope:" '[.[] | select(.body | contains($p))] | first | .number // empty' <<< "$open")
             if [ -n "$prev" ]; then
               printf '\nSupersedes #%s: the diff changed.\n' "$prev" >> "$OUT/body.md"
             fi
-            url=$(gh issue create --label drift --title "Drift: $BACKEND/$model $today" --body-file "$OUT/body.md")
+            url=$(gh issue create --label drift --title "Drift: $BACKEND/$model$where $today" --body-file "$OUT/body.md")
             if [ -n "$prev" ]; then
               gh issue comment "$prev" --body "The diff changed; tracking continues in $url."
             fi
