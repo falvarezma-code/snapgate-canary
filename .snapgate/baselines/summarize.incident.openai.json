@@ -1,8 +1,8 @@
 {
   "schema_version": 2,
   "case": "summarize.incident.openai",
-  "fingerprint": "sha256:53934c9290aca86a43b91cd2608c9a4a54e4934022642a4b56ef2624707a582c",
-  "recorded_at": "2026-09-10T12:06:02Z",
+  "fingerprint": "sha256:89ef708a032d2b5064b8ec220f57885da7b2dcff369762be0ec22bcc069bd318",
+  "recorded_at": "2026-10-04T14:47:58Z",
   "snapgate_version": "v0.1.1",
   "provider": {
     "name": "openai",
@@ -36,14 +36,10 @@
     {
       "type": "not_contains",
       "value": "Here is"
-    },
-    {
-      "type": "similarity",
-      "threshold": 0.9
     }
   ],
   "response": {
-    "text": "A database outage occurred due to a failed log rotation, prompting the addition of a disk-usage alert and a verification check for the job.",
+    "text": "A database outage occurred due to a failed log rotation, leading to rejected writes for 41 minutes until volume expansion; alerts and checks are being implemented.",
     "model": "gpt-4o-mini-2024-07-18",
     "finish_reason": "stop"
   }

@@ -339,6 +339,9 @@ cases:
       - {type: not_contains, value: "Here is"}
       - {type: exact}
       - {type: similarity, threshold: 1}
+  # No similarity check: gpt-4o-mini gave three different wordings of this
+  # summary within half an hour on 2026-10-04 (similarity 0.47 to 0.52), so
+  # any baseline fails about as often as it passes. Property checks only.
   - name: summarize.incident.openai
     provider: openai
     model: gpt-4o-mini
@@ -348,7 +351,6 @@ cases:
       - {type: max_length, value: "300"}
       - {type: min_length, value: "20"}
       - {type: not_contains, value: "Here is"}
-      - {type: similarity, threshold: 0.9}
 
   - name: summarize.meeting.ollama
     provider: ollama
