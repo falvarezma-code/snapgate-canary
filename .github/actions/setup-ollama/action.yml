@@ -1,9 +1,17 @@
 name: Setup Ollama
 description: >-
-  Install Ollama (unpinned, so runtime upgrades are observed and recorded),
-  start it under the runner user with a pinned context length and
-  parallelism, and pull the model from a cache keyed on its tag.
+  Install a pinned Ollama version, start it under the runner user with a
+  pinned context length and parallelism, and pull the model from a cache
+  keyed on its tag.
 inputs:
+  version:
+    description: >-
+      Ollama release to install. Pinned because a runtime upgrade changes
+      answers on every SIMD class at once (0.35.1 did, issues #14 and #15) and
+      the hosts/ baselines are recorded against one version. Upgrading is a
+      pull request: bump this, re-record each class, review the diffs.
+    required: false
+    default: "0.34.0"
   model:
     description: Model tag to pull
     required: false
@@ -31,6 +39,8 @@ runs:
 
     - name: Install Ollama
       shell: bash
+      env:
+        OLLAMA_VERSION: ${{ inputs.version }}
       run: |
         curl -fsSL https://ollama.com/install.sh | sh
         # The installer starts a systemd unit as its own user with its own
@@ -39,6 +49,8 @@ runs:
         # model directory is the one it reads.
         sudo systemctl disable --now ollama 2>/dev/null || true
         ollama --version
+        # Fail here rather than drift tonight if the installer ignored the pin.
+        ollama --version 2>&1 | grep -qF "$OLLAMA_VERSION" || { echo "::error::expected Ollama $OLLAMA_VERSION"; exit 1; }
 
     - name: Start server and pull model
       shell: bash
