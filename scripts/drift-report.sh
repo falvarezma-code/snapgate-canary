@@ -8,8 +8,8 @@
 #             model names, the unified diffs, and the upstream fingerprint
 #             before (committed) and after (this run)
 #   key       hex digest of the diffs; two runs that produce the same diffs
-#             produce the same key, so the nightly can tell "same drift,
-#             day N" from "new drift"
+#             produce the same key, so the nightly can tell "same drift
+#             again" from "new drift"
 #   scope     what the key is scoped to: the backend, plus the CPU SIMD
 #             class for Ollama, whose classes keep separate baseline sets
 #             and so drift independently
@@ -122,7 +122,7 @@ table=$(jq -r '
   printf '## Upstream fingerprint\n\n'
   cat "$fp"
   printf '\n## Next\n\n'
-  printf -- '- Same diff tomorrow: this issue gets a "still drifted" comment instead of a new issue.\n'
+  printf -- '- Same diff on a later night: this issue gets a "drifted again" comment instead of a new issue, and an `intermittent` label if the diff skipped any nights.\n'
   printf -- '- New output is acceptable: run the **record** workflow with `mode: accept`, `backend: %s`. It re-checks, promotes only the drifted cases, verifies them, and opens a PR with the new baselines and fingerprint.\n' "$backend"
   printf -- '- New output is wrong: keep the baselines; the issue stays open as the public record.\n'
 } > "$out/body.md"
