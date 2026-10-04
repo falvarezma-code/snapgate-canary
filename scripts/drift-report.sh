@@ -10,6 +10,9 @@
 #   key       hex digest of the diffs; two runs that produce the same diffs
 #             produce the same key, so the nightly can tell "same drift,
 #             day N" from "new drift"
+#   scope     what the key is scoped to: the backend, plus the CPU SIMD
+#             class for Ollama, whose classes keep separate baseline sets
+#             and so drift independently
 #   model     the model name as configured for this backend
 #
 # Only cases with status "drift" and a non-empty diff count as upstream
@@ -37,6 +40,10 @@ mkdir -p "$out"
 
 model=$(yq -r ".cases[] | select(.provider == \"$backend\") | .model" "$config" | sort -u | head -1)
 printf '%s\n' "$model" > "$out/model"
+
+scope="$backend"
+[ "$backend" = ollama ] && scope="$backend/$("$here/scripts/host-baselines.sh" slug)"
+printf '%s\n' "$scope" > "$out/scope"
 
 total=$(jq -r '.cases | length' "$report")
 ndrift=$(jq -r '[.cases[] | select(.status == "drift" and .diff != "")] | length' "$report")
@@ -98,7 +105,7 @@ table=$(jq -r '
 
 # --- assemble ----------------------------------------------------------------
 {
-  printf '<!-- snapgate-canary drift-key: %s:%s -->\n' "$backend" "$(cat "$out/key")"
+  printf '<!-- snapgate-canary drift-key: %s:%s -->\n' "$scope" "$(cat "$out/key")"
   printf 'Nightly canary detected **upstream drift** on `%s` / `%s`.\n\n' "$backend" "$model"
   printf 'Nothing in this repository changed: every request fingerprint still matches its committed baseline. The answers did not.\n\n'
   [ -n "${RUN_URL:-}" ] && printf 'Run: %s\n\n' "$RUN_URL"
