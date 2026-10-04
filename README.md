@@ -23,7 +23,7 @@ v0.1.1: a config, committed baselines, and three workflows.
 | [`fingerprints/`](fingerprints/) | The hosted backend's identity at record time: the alias requested and the dated model the endpoint reported. Snapgate does not record this; [`scripts/fingerprint.sh`](scripts/fingerprint.sh) does the Ollama side. |
 | [`schemas/`](schemas/) | JSON Schemas for the extraction group. |
 | [`scripts/`](scripts/) | `check.sh` (one backend, retries transient errors within a budget), `drift-report.sh` (issue body and dedupe key), `explain-exit.sh` (statuses to annotations), `fingerprint.sh`, `ollama-serve.sh` (start or restart the server with the pinned settings), `host-baselines.sh` (Ollama baseline sets per SIMD class), `determinism.sh` (experiments; the `determinism` workflow runs it on a runner). |
-| [`.github/workflows/gate.yml`](.github/workflows/gate.yml) | On every pull request: check both backends. Anything but `pass` blocks the merge. |
+| [`.github/workflows/gate.yml`](.github/workflows/gate.yml) | On every pull request: check both backends. Anything but `pass` blocks the merge, except a hosted answer that is only reworded (every check on the answer itself still passes), which is a warning. |
 | [`.github/workflows/canary.yml`](.github/workflows/canary.yml) | Nightly and on demand: check both backends, file or update drift issues. |
 | [`.github/workflows/record.yml`](.github/workflows/record.yml) | On demand: record or accept baselines on the runner, verify them, open a pull request. |
 | [`GAPS.md`](GAPS.md) | What this canary needed that Snapgate does not have, and the smallest change that would close each gap. |
@@ -35,7 +35,7 @@ v0.1.1: a config, committed baselines, and three workflows.
 | Model | `qwen2.5:1.5b`, Q4_K_M, pulled unpinned by tag | `gpt-4o-mini`, the alias, so provider-side version changes are observed |
 | Where | Ollama 0.34.0 (pinned; upgrading is a PR that re-records each class) installed on the runner, keyless, `OLLAMA_CONTEXT_LENGTH=2048`, `OLLAMA_NUM_PARALLEL=1`, restarted before every case; baselines per CPU SIMD class | `https://api.openai.com/v1` with the `OPENAI_API_KEY` secret |
 | Cases | all 24 | 20; at most 24 requests per check run including retries |
-| Baseline check | `exact` | `exact` for extraction and classification, `similarity ≥ 0.9` for summaries and code, except `summarize.incident`, whose wording is unstable (property checks only) |
+| Baseline check | `exact` | `exact` for extraction and classification, `similarity ≥ 0.9` for summaries and code |
 | Params | temperature 0, seed 42, per-group `max_tokens` | same |
 
 The original design used GitHub Models with the built-in token and no secret.
